@@ -1,7 +1,32 @@
 // BIS Intelligent Assistant - Full Stack API Service
 // Connects React Frontend to Java Spring Boot Backend (http://localhost:8080) with PostgreSQL Database
+// Handles JWT Authorization headers and 401 token expiration handling
+
+import { getStoredToken, clearStoredAuth } from './authService';
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+
+/**
+ * Helper to build headers with Authorization Bearer token for protected endpoints.
+ */
+function getAuthHeaders(additionalHeaders = {}) {
+  const headers = { ...additionalHeaders };
+  const token = getStoredToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+/**
+ * Handle HTTP 401 Unauthorized responses by clearing auth storage and broadcasting an event.
+ */
+function handleUnauthorized() {
+  clearStoredAuth();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('bis-auth-unauthorized'));
+  }
+}
 
 /**
  * Send a chat query to the Java Spring Boot backend.
@@ -17,9 +42,10 @@ export async function sendChatMessage(message, language = 'en', history = [], se
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/api/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: getAuthHeaders({
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }),
       body: JSON.stringify({
         message: message.trim(),
         language: language || 'en',
@@ -28,7 +54,17 @@ export async function sendChatMessage(message, language = 'en', history = [], se
       })
     });
 
-    const data = await response.json();
+    if (response.status === 401) {
+      handleUnauthorized();
+      return {
+        success: false,
+        error: "Session expired or authentication required. Please log in again.",
+        isAuthError: true,
+        status: 401
+      };
+    }
+
+    const data = await response.json().catch(() => ({}));
 
     if (response.ok && data.success) {
       return {
@@ -97,7 +133,7 @@ export async function testBackendGemini() {
 }
 
 // ==========================================
-// Database-Backed Catalog APIs
+// Database-Backed Catalog APIs (Public)
 // ==========================================
 
 export async function fetchStandards() {
@@ -166,9 +202,22 @@ export async function fetchUpdates() {
   }
 }
 
+// ==========================================
+// Protected Conversation APIs (Requires JWT)
+// ==========================================
+
 export async function fetchConversations() {
   try {
-    const res = await fetch(`${BACKEND_BASE_URL}/api/conversations`);
+    const token = getStoredToken();
+    if (!token) return [];
+
+    const res = await fetch(`${BACKEND_BASE_URL}/api/conversations`, {
+      headers: getAuthHeaders({ 'Accept': 'application/json' })
+    });
+    if (res.status === 401) {
+      handleUnauthorized();
+      return [];
+    }
     if (res.ok) return await res.json();
     return [];
   } catch (e) {
@@ -179,7 +228,16 @@ export async function fetchConversations() {
 
 export async function fetchConversationById(sessionId) {
   try {
-    const res = await fetch(`${BACKEND_BASE_URL}/api/conversations/${encodeURIComponent(sessionId)}`);
+    const token = getStoredToken();
+    if (!token) return null;
+
+    const res = await fetch(`${BACKEND_BASE_URL}/api/conversations/${encodeURIComponent(sessionId)}`, {
+      headers: getAuthHeaders({ 'Accept': 'application/json' })
+    });
+    if (res.status === 401) {
+      handleUnauthorized();
+      return null;
+    }
     if (res.ok) return await res.json();
     return null;
   } catch (e) {
@@ -190,9 +248,17 @@ export async function fetchConversationById(sessionId) {
 
 export async function deleteConversation(sessionId) {
   try {
+    const token = getStoredToken();
+    if (!token) return { deleted: false };
+
     const res = await fetch(`${BACKEND_BASE_URL}/api/conversations/${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders({ 'Accept': 'application/json' })
     });
+    if (res.status === 401) {
+      handleUnauthorized();
+      return { deleted: false };
+    }
     if (res.ok) return await res.json();
     return { deleted: false };
   } catch (e) {

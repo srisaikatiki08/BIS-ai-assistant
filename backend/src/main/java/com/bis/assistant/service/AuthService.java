@@ -92,6 +92,13 @@ public class AuthService {
                     return new BadCredentialsException("Invalid email or password.");
                 });
 
+        if (cleanEmail.equalsIgnoreCase("legacy.anonymous@bis.gov.in") ||
+                user.getPasswordHash().startsWith("$DISABLED$") ||
+                user.getPasswordHash().startsWith("*LOCKED*")) {
+            logger.warn("Login attempt rejected for locked archive account: {}", cleanEmail);
+            throw new BadCredentialsException("Invalid email or password.");
+        }
+
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             logger.warn("Invalid password attempt for user id: {}", user.getId());
             throw new BadCredentialsException("Invalid email or password.");

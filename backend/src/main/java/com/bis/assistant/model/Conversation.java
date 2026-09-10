@@ -6,14 +6,26 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "conversations")
+@Table(
+        name = "conversations",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_conversations_user_session",
+                        columnNames = {"user_id", "session_identifier"}
+                )
+        }
+)
 public class Conversation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "session_identifier", unique = true, nullable = false, length = 150)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Column(name = "session_identifier", nullable = false, length = 150)
     private String sessionIdentifier;
 
     @Column(nullable = false, length = 250)
@@ -34,11 +46,22 @@ public class Conversation {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public Conversation(String sessionIdentifier, String title) {
+    public Conversation(User user, String sessionIdentifier, String title) {
+        this.user = user;
         this.sessionIdentifier = sessionIdentifier;
         this.title = title;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = LocalDateTime.now();
+        }
     }
 
     @PreUpdate
@@ -52,6 +75,14 @@ public class Conversation {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public String getSessionIdentifier() {

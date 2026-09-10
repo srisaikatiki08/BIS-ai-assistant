@@ -133,6 +133,20 @@ class AuthServiceTest {
     }
 
     @Test
+    void login_ArchiveUserThrowsBadCredentials() {
+        LoginRequest request = new LoginRequest("legacy.anonymous@bis.gov.in", "AnyPassword");
+
+        User archiveUser = new User("Legacy Archive User", "legacy.anonymous@bis.gov.in", "$DISABLED$LOCKED_LEGACY_ARCHIVE_NO_LOGIN$");
+        archiveUser.setId(999L);
+
+        when(userRepository.findByEmailIgnoreCase("legacy.anonymous@bis.gov.in")).thenReturn(Optional.of(archiveUser));
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid email or password");
+    }
+
+    @Test
     void getCurrentUserProfile_Success() {
         User user = new User("Rajesh Kumar", "rajesh@example.com", "hashedPassword123");
         user.setId(1L);

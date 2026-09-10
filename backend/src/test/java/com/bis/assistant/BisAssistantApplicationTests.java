@@ -220,4 +220,106 @@ class BisAssistantApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5174"));
     }
+
+    @Autowired
+    private com.bis.assistant.service.ConversationService conversationService;
+
+    @Autowired
+    private com.bis.assistant.repository.ConversationRepository conversationRepository;
+
+    @Test
+    void authenticatedUserCanSaveAndRetrieveConversations() throws Exception {
+        User user = userRepository.findByEmailIgnoreCase("user.integ@bis.gov.in")
+                .orElseGet(() -> userRepository.save(new User("Integration User", "user.integ@bis.gov.in", passwordEncoder.encode("Password@123"))));
+
+        String token = jwtTokenProvider.generateToken(user.getEmail(), user.getId());
+        String sessionId = "integ-sess-" + System.currentTimeMillis();
+
+        // Save messages directly for this user
+        conversationService.saveMessageForUser(user, sessionId, "user", "What is the IS 10500 standard?");
+        conversationService.saveMessageForUser(user, sessionId, "model", "IS 10500 specifies drinking water quality.");
+
+        // GET /api/conversations with user's token
+        mockMvc.perform(get("/api/conversations")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$[?(@.sessionIdentifier == '" + sessionId + "')]").exists());
+
+        // GET /api/conversations/{sessionId} with user's token
+        mockMvc.perform(get("/api/conversations/" + sessionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.sessionIdentifier").value(sessionId))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.messages.length()").value(2));
+    }
+
+    @Test
+    void twoUsersCanUseSameSessionIdentifierWithoutConflictIntegration() throws Exception {
+        User user1 = userRepository.findByEmailIgnoreCase("user1.integ@bis.gov.in")
+                .orElseGet(() -> userRepository.save(new User("User One", "user1.integ@bis.gov.in", passwordEncoder.encode("Password@123"))));
+        User user2 = userRepository.findByEmailIgnoreCase("user2.integ@bis.gov.in")
+                .orElseGet(() -> userRepository.save(new User("User Two", "user2.integ@bis.gov.in", passwordEncoder.encode("Password@123"))));
+
+        String token1 = jwtTokenProvider.generateToken(user1.getEmail(), user1.getId());
+        String token2 = jwtTokenProvider.generateToken(user2.getEmail(), user2.getId());
+
+        String sharedSessionId = "shared-session-xyz-" + System.currentTimeMillis();
+
+        // User 1 saves a message
+        conversationService.saveMessageForUser(user1, sharedSessionId, "user", "Message from User 1");
+        // User 2 saves a message in the same session identifier
+        conversationService.saveMessageForUser(user2, sharedSessionId, "user", "Message from User 2");
+
+        // User 1 gets their conversation
+        mockMvc.perform(get("/api/conversations/" + sharedSessionId)
+                        .header("Authorization", "Bearer " + token1))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.messages[0].content").value("Message from User 1"));
+
+        // User 2 gets their conversation
+        mockMvc.perform(get("/api/conversations/" + sharedSessionId)
+                        .header("Authorization", "Bearer " + token2))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.messages[0].content").value("Message from User 2"));
+    }
+
+    @Test
+    void userCannotRetrieveOrDeleteAnotherUsersConversationIntegration() throws Exception {
+        User owner = userRepository.findByEmailIgnoreCase("owner@bis.gov.in")
+                .orElseGet(() -> userRepository.save(new User("Owner User", "owner@bis.gov.in", passwordEncoder.encode("Password@123"))));
+        User attacker = userRepository.findByEmailIgnoreCase("attacker@bis.gov.in")
+                .orElseGet(() -> userRepository.save(new User("Attacker User", "attacker@bis.gov.in", passwordEncoder.encode("Password@123"))));
+
+        String attackerToken = jwtTokenProvider.generateToken(attacker.getEmail(), attacker.getId());
+        String privateSessionId = "private-owner-session-" + System.currentTimeMillis();
+
+        conversationService.saveMessageForUser(owner, privateSessionId, "user", "Owner Private Data");
+
+        // Attacker attempts GET
+        mockMvc.perform(get("/api/conversations/" + privateSessionId)
+                        .header("Authorization", "Bearer " + attackerToken))
+                .andExpect(status().isNotFound());
+
+        // Attacker attempts DELETE
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/conversations/" + privateSessionId)
+                        .header("Authorization", "Bearer " + attackerToken))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.deleted").value(false));
+
+        // Verify owner conversation is still intact
+        var ownerConv = conversationRepository.findByUserAndSessionIdentifier(owner, privateSessionId);
+        assertThat(ownerConv).isPresent();
+    }
+
+    @Test
+    void unauthenticatedAccessToConversationsIsRejected() throws Exception {
+        mockMvc.perform(get("/api/conversations"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/conversations/any-session"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/conversations/any-session"))
+                .andExpect(status().isUnauthorized());
+    }
 }

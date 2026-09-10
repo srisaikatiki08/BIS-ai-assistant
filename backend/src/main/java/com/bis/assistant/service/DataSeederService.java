@@ -1,5 +1,6 @@
 package com.bis.assistant.service;
 
+import com.bis.assistant.config.DatabaseMigrationService;
 import com.bis.assistant.model.*;
 import com.bis.assistant.repository.*;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ public class DataSeederService implements CommandLineRunner {
     private final BISUpdateRepository updateRepository;
     private final ProductRepository productRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
+    private final DatabaseMigrationService databaseMigrationService;
 
     public DataSeederService(StandardRepository standardRepository,
                              CertificationSchemeRepository schemeRepository,
@@ -30,7 +32,8 @@ public class DataSeederService implements CommandLineRunner {
                              HallmarkingInfoRepository hallmarkingRepository,
                              BISUpdateRepository updateRepository,
                              ProductRepository productRepository,
-                             KnowledgeChunkRepository knowledgeChunkRepository) {
+                             KnowledgeChunkRepository knowledgeChunkRepository,
+                             DatabaseMigrationService databaseMigrationService) {
         this.standardRepository = standardRepository;
         this.schemeRepository = schemeRepository;
         this.laboratoryRepository = laboratoryRepository;
@@ -39,11 +42,13 @@ public class DataSeederService implements CommandLineRunner {
         this.updateRepository = updateRepository;
         this.productRepository = productRepository;
         this.knowledgeChunkRepository = knowledgeChunkRepository;
+        this.databaseMigrationService = databaseMigrationService;
     }
 
     @Override
     public void run(String... args) {
         try {
+            databaseMigrationService.migrate();
             if (standardRepository.count() == 0) {
                 logger.info("Seeding authentic Bureau of Indian Standards (BIS) database...");
                 seedCertificationSchemes();

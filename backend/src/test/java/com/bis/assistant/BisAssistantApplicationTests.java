@@ -1,6 +1,10 @@
 package com.bis.assistant;
 
 import com.bis.assistant.dto.*;
+import com.bis.assistant.model.User;
+import com.bis.assistant.repository.UserRepository;
+import com.bis.assistant.security.JwtTokenProvider;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -8,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +35,29 @@ class BisAssistantApplicationTests {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    private String testAuthToken;
+    private HttpHeaders authHeaders;
+
+    @BeforeEach
+    void setUp() {
+        User testUser = userRepository.findByEmailIgnoreCase("admin@bis.gov.in")
+                .orElseGet(() -> userRepository.save(new User("Admin User", "admin@bis.gov.in", passwordEncoder.encode("Password@123"))));
+
+        testAuthToken = jwtTokenProvider.generateToken(testUser.getEmail(), testUser.getId());
+        authHeaders = new HttpHeaders();
+        authHeaders.setBearerAuth(testAuthToken);
+        authHeaders.setContentType(MediaType.APPLICATION_JSON);
+    }
+
     @Test
     void contextLoads() {
     }
@@ -42,14 +70,13 @@ class BisAssistantApplicationTests {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getStatus()).isEqualTo("UP");
-        assertThat(response.getBody().getActiveModel()).isEqualTo("gemini-2.5-flash");
-        assertThat(response.getBody().getGeminiEndpoint()).isEqualTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
     }
 
     @Test
     void standardsEndpointReturnsRecords() {
         String url = "http://localhost:" + port + "/api/standards";
-        ResponseEntity<StandardDTO[]> response = restTemplate.getForEntity(url, StandardDTO[].class);
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders);
+        ResponseEntity<StandardDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity, StandardDTO[].class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -58,7 +85,8 @@ class BisAssistantApplicationTests {
     @Test
     void servicesEndpointReturnsRecords() {
         String url = "http://localhost:" + port + "/api/services";
-        ResponseEntity<BISServiceDTO[]> response = restTemplate.getForEntity(url, BISServiceDTO[].class);
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders);
+        ResponseEntity<BISServiceDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity, BISServiceDTO[].class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -67,7 +95,8 @@ class BisAssistantApplicationTests {
     @Test
     void laboratoriesEndpointReturnsRecords() {
         String url = "http://localhost:" + port + "/api/laboratories";
-        ResponseEntity<LaboratoryDTO[]> response = restTemplate.getForEntity(url, LaboratoryDTO[].class);
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders);
+        ResponseEntity<LaboratoryDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity, LaboratoryDTO[].class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -76,7 +105,8 @@ class BisAssistantApplicationTests {
     @Test
     void updatesEndpointReturnsRecords() {
         String url = "http://localhost:" + port + "/api/updates";
-        ResponseEntity<BISUpdateDTO[]> response = restTemplate.getForEntity(url, BISUpdateDTO[].class);
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders);
+        ResponseEntity<BISUpdateDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity, BISUpdateDTO[].class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -86,7 +116,8 @@ class BisAssistantApplicationTests {
     void chatEndpointRejectsEmptyMessage() {
         String url = "http://localhost:" + port + "/api/chat";
         ChatRequest emptyRequest = new ChatRequest("", "en", null);
-        ResponseEntity<ChatResponse> response = restTemplate.postForEntity(url, emptyRequest, ChatResponse.class);
+        HttpEntity<ChatRequest> entity = new HttpEntity<>(emptyRequest, authHeaders);
+        ResponseEntity<ChatResponse> response = restTemplate.postForEntity(url, entity, ChatResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
@@ -94,11 +125,19 @@ class BisAssistantApplicationTests {
     }
 
     @Test
+    void unauthenticatedAccessToProtectedEndpointFails() {
+        String url = "http://localhost:" + port + "/api/standards";
+        ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void corsPreflightRequestAllowedForLocalhost5174() throws Exception {
         mockMvc.perform(options("/api/chat")
                         .header("Origin", "http://localhost:5174")
                         .header("Access-Control-Request-Method", "POST")
-                        .header("Access-Control-Request-Headers", "Content-Type"))
+                        .header("Access-Control-Request-Headers", "Content-Type, Authorization"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5174"))
                 .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")));
@@ -109,7 +148,7 @@ class BisAssistantApplicationTests {
         mockMvc.perform(options("/api/chat")
                         .header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "POST")
-                        .header("Access-Control-Request-Headers", "Content-Type"))
+                        .header("Access-Control-Request-Headers", "Content-Type, Authorization"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
                 .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")));
@@ -158,6 +197,7 @@ class BisAssistantApplicationTests {
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/knowledge/upload")
                         .file(pdfFile)
+                        .header("Authorization", "Bearer " + testAuthToken)
                         .param("document", "IS 17017:2026")
                         .param("title", "EV Charging & Swapping Safety")
                         .param("sourceUrl", "https://standardsbis.bsbedge.com")

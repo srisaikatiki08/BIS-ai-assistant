@@ -127,4 +127,28 @@ class GeminiServiceCitationTest {
 
         assertThat(citations).isEmpty();
     }
+
+    @Test
+    void extractCitationsWithoutSourceUrlLeavesUrlAbsent() {
+        KnowledgeChunk chunkWithoutUrl = new KnowledgeChunk(
+                "IS 10500:2012",
+                "Drinking water specifications",
+                "Water Quality",
+                "Section 3",
+                "3.1",
+                4,
+                null
+        );
+        chunkWithoutUrl.setId(4L);
+
+        String answer = "Drinking water standard parameters [Source 1].";
+        List<Map<String, Object>> citations = geminiService.extractCitations(answer, List.of(chunkWithoutUrl));
+
+        assertThat(citations).hasSize(1);
+        Map<String, Object> citation = citations.get(0);
+        assertThat(citation.get("source")).isEqualTo("[Source 1]");
+        assertThat(citation.get("document")).isEqualTo("IS 10500:2012");
+        assertThat(citation.get("sourceUrl")).isNull();
+        assertThat(citation.get("portalUrl")).isNull();
+    }
 }

@@ -171,10 +171,8 @@ public class GeminiService {
                                     sourceRef.put("pageNumber", firstChunk.getPageNumber());
                                 }
                                 if (firstChunk.getSourceUrl() != null && !firstChunk.getSourceUrl().isBlank()) {
-                                    sourceRef.put("sourceUrl", firstChunk.getSourceUrl());
-                                    sourceRef.put("portalUrl", firstChunk.getSourceUrl());
-                                } else {
-                                    sourceRef.put("portalUrl", "https://manakonline.in");
+                                    sourceRef.put("sourceUrl", firstChunk.getSourceUrl().trim());
+                                    sourceRef.put("portalUrl", firstChunk.getSourceUrl().trim());
                                 }
                                 sourceRef.put("disclaimer", "Official Bureau of Indian Standards regulatory reference.");
                             }
@@ -402,10 +400,8 @@ public class GeminiService {
                 citation.put("pageNumber", chunk.getPageNumber());
             }
             if (chunk.getSourceUrl() != null && !chunk.getSourceUrl().isBlank()) {
-                citation.put("sourceUrl", chunk.getSourceUrl());
-                citation.put("portalUrl", chunk.getSourceUrl());
-            } else {
-                citation.put("portalUrl", "https://manakonline.in");
+                citation.put("sourceUrl", chunk.getSourceUrl().trim());
+                citation.put("portalUrl", chunk.getSourceUrl().trim());
             }
             citations.add(citation);
         }

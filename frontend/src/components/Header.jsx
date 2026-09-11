@@ -13,15 +13,31 @@ import {
   X, 
   ShieldCheck, 
   Compass, 
-  FileText 
+  FileText,
+  User as UserIcon,
+  LogOut
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function Header() {
-  const { activeTab, setActiveTab, language, setLanguage, theme, setTheme, t } = useApp();
+  const { 
+    activeTab, 
+    setActiveTab, 
+    language, 
+    setLanguage, 
+    theme, 
+    setTheme, 
+    user, 
+    logout, 
+    t 
+  } = useApp();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+
   const langDropdownRef = useRef(null);
+  const userDropdownRef = useRef(null);
 
   const navItems = [
     { id: 'home', label: t.nav.home, icon: Compass },
@@ -45,16 +61,27 @@ export default function Header() {
     { code: 'te', label: 'తెలుగు (Telugu)' }
   ];
 
-  // Close language dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
         setLangDropdownOpen(false);
       }
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) {
+        setUserDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Compute initials
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   return (
     <>
@@ -69,6 +96,15 @@ export default function Header() {
             <span>Bureau of Indian Standards</span>
           </div>
         </div>
+
+        {user && (
+          <div className="gov-sub-bar-right" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span className="user-status-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+              <span>Signed in as: <strong>{user.fullName || user.email}</strong></span>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Main Header Bar */}
@@ -106,7 +142,7 @@ export default function Header() {
             })}
           </nav>
 
-          {/* Controls: Language, Theme, Mobile Menu */}
+          {/* Controls: Language, Theme, User Profile, Mobile Menu */}
           <div className="header-actions">
             {/* Language Switcher (Desktop) */}
             <div className="header-lang-wrapper" style={{ position: 'relative' }} ref={langDropdownRef}>
@@ -175,6 +211,61 @@ export default function Header() {
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
 
+            {/* User Account / Profile Menu (Desktop) */}
+            {user && (
+              <div className="header-user-wrapper" style={{ position: 'relative' }} ref={userDropdownRef}>
+                <button
+                  className="user-profile-btn"
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  title={`Account: ${user.fullName || user.email}`}
+                  aria-expanded={userDropdownOpen}
+                >
+                  <div className="user-avatar-circle">
+                    {getInitials(user.fullName)}
+                  </div>
+                  <span className="user-name-label">{user.fullName ? user.fullName.split(' ')[0] : 'Account'}</span>
+                </button>
+
+                {userDropdownOpen && (
+                  <div
+                    className="user-dropdown-menu"
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      right: 0,
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: 'var(--shadow-lg)',
+                      padding: '0.75rem',
+                      zIndex: 150,
+                      minWidth: '220px'
+                    }}
+                  >
+                    <div style={{ marginBottom: '0.75rem', paddingBottom: '0.6rem', borderBottom: '1px solid var(--border-light)' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                        {user.fullName || 'Authorized User'}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {user.email}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setUserDropdownOpen(false);
+                        logout();
+                      }}
+                      className="user-logout-item"
+                    >
+                      <LogOut size={15} color="#ef4444" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Mobile Menu Toggle */}
             <button
               className="mobile-menu-btn"
@@ -189,6 +280,23 @@ export default function Header() {
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
           <div className="mobile-nav-dropdown">
+            {/* User Details on Mobile */}
+            {user && (
+              <div className="mobile-user-card">
+                <div className="user-avatar-circle" style={{ width: '36px', height: '36px', fontSize: '0.85rem' }}>
+                  {getInitials(user.fullName)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user.fullName || 'User'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user.email}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mobile-nav-links">
               {navItems.map((item) => {
                 const Icon = item.icon;
@@ -236,6 +344,22 @@ export default function Header() {
                 ))}
               </div>
             </div>
+
+            {/* Sign Out on Mobile */}
+            {user && (
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)' }}>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    logout();
+                  }}
+                  className="mobile-logout-btn"
+                >
+                  <LogOut size={16} color="#ef4444" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </header>

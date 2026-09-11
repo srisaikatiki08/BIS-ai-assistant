@@ -174,15 +174,17 @@ export default function ChatMessage({ message }) {
                 </div>
               </div>
 
-              <a
-                href={message.sourceReference.portalUrl || "https://manakonline.in"}
-                target="_blank"
-                rel="noreferrer"
-                className="source-view-link"
-              >
-                <span>View Source</span>
-                <ExternalLink size={13} />
-              </a>
+              {(message.sourceReference.portalUrl || message.sourceReference.sourceUrl) && (
+                <a
+                  href={(message.sourceReference.portalUrl || message.sourceReference.sourceUrl).trim()}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="source-view-link"
+                >
+                  <span>View Source</span>
+                  <ExternalLink size={13} />
+                </a>
+              )}
             </div>
           )}
 

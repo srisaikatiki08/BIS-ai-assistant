@@ -33,8 +33,7 @@ public class PdfIngestionService {
     }
 
     /**
-     * Ingests a BIS PDF document, extracts page-by-page text, segments into KnowledgeChunks,
-     * checks duplicate document records, and persists chunks into PostgreSQL.
+     * Ingests a BIS PDF document from a Spring MultipartFile.
      */
     @Transactional
     public KnowledgeUploadResponse ingestPdf(MultipartFile file,
@@ -56,6 +55,31 @@ public class PdfIngestionService {
             }
         }
 
+        try {
+            return ingestPdf(file.getBytes(), originalFilename, documentName, title, section, sourceUrl, overwrite);
+        } catch (IOException e) {
+            logger.error("Failed to read bytes from uploaded PDF '{}': {}", originalFilename, e.getMessage(), e);
+            return KnowledgeUploadResponse.error(documentName, "Failed to read uploaded PDF: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Ingests a BIS PDF document from raw bytes, extracts page-by-page text, segments into KnowledgeChunks,
+     * checks duplicate document records, and persists chunks into PostgreSQL.
+     */
+    @Transactional
+    public KnowledgeUploadResponse ingestPdf(byte[] pdfBytes,
+                                            String originalFilename,
+                                            String documentName,
+                                            String title,
+                                            String section,
+                                            String sourceUrl,
+                                            boolean overwrite) {
+
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            return KnowledgeUploadResponse.error(documentName, "PDF content is empty.");
+        }
+
         String docIdentifier = (documentName != null && !documentName.trim().isEmpty())
                 ? documentName.trim()
                 : (originalFilename != null ? originalFilename.replaceFirst("(?i)\\.pdf$", "") : "BIS-DOCUMENT");
@@ -75,7 +99,7 @@ public class PdfIngestionService {
         List<KnowledgeChunk> chunksToSave = new ArrayList<>();
         int totalPages = 0;
 
-        try (PDDocument pdDocument = Loader.loadPDF(file.getBytes())) {
+        try (PDDocument pdDocument = Loader.loadPDF(pdfBytes)) {
             totalPages = pdDocument.getNumberOfPages();
             if (totalPages == 0) {
                 return KnowledgeUploadResponse.error(docIdentifier, "Uploaded PDF has 0 pages.");
@@ -170,6 +194,8 @@ public class PdfIngestionService {
                     char c = cleaned.charAt(i - 1);
                     if (c == '\n' || (c == '.' && (i == cleaned.length() || Character.isWhitespace(cleaned.charAt(i))))) {
                         boundary = i;
+                    }
+                    if (boundary != -1) {
                         break;
                     }
                 }
@@ -201,10 +227,22 @@ public class PdfIngestionService {
             return null;
         }
 
+        Pattern deptPattern = Pattern.compile("(?i)\\b((?:CED|CHD|MHD|MED|TXD|TED|LITD|ETD|FAD|MTD|PCD|WRD)\\s+\\d{1,3})\\b");
+        Matcher deptMatcher = deptPattern.matcher(text);
+        if (deptMatcher.find()) {
+            return deptMatcher.group(1).toUpperCase().trim();
+        }
+
         Pattern p = Pattern.compile("(?i)\\b(?:Clause|Section|Annex|Part)\\s+([0-9A-Za-z\\.\\-]+)");
         Matcher m = p.matcher(text);
         if (m.find()) {
             return m.group(0).trim();
+        }
+
+        Pattern isPattern = Pattern.compile("(?i)\\b(IS(?:/IEC|/ISO)?\\s+\\d+(?:\\s*\\([A-Za-z0-9\\s]+\\))?(?::\\d{4})?)\\b");
+        Matcher isMatcher = isPattern.matcher(text);
+        if (isMatcher.find()) {
+            return isMatcher.group(1).trim();
         }
 
         Pattern numPattern = Pattern.compile("(?m)^\\s*([0-9]+\\.[0-9]+(?:\\.[0-9]+)*)\\b");

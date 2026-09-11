@@ -90,12 +90,11 @@ export async function queryAiAssistantAsync(userQuery, language = 'en', history 
         category: matchedStandard ? matchedStandard.category : "BIS Standards Advisory",
         modelBadge: backendResult.model || "Google Gemini (Spring Boot)",
         matchedStandard: matchedStandard,
-        sourceReference: backendResult.sourceReference || {
-          document: matchedStandard ? `${matchedStandard.isNumber} & Official BIS Gazette` : "Bureau of Indian Standards Act & National Repository",
-          clause: matchedStandard ? (matchedStandard.keyClauses?.[0]?.clause ? `Clause ${matchedStandard.keyClauses[0].clause}` : "Quality Control Order") : "Section 16 / BIS Conformity Assessment",
-          portalUrl: "https://manakonline.in",
+        sourceReference: backendResult.sourceReference || (matchedStandard ? {
+          document: `${matchedStandard.isNumber} & Official BIS Gazette`,
+          clause: matchedStandard.keyClauses?.[0]?.clause ? `Clause ${matchedStandard.keyClauses[0].clause}` : "Quality Control Order",
           disclaimer: "AI-generated output backed by Bureau of Indian Standards regulatory repository. Verify for official certification submissions."
-        },
+        } : null),
         suggestedFollowUps: backendResult.suggestedFollowUps || [
           "What are the laboratory testing fees and timeline?",
           "Which documents are required for MSME fee concession?",
@@ -116,7 +115,6 @@ export async function queryAiAssistantAsync(userQuery, language = 'en', history 
         sourceReference: {
           document: "System Configuration",
           clause: "Environment Variable Check",
-          portalUrl: "https://manakonline.in",
           disclaimer: "AI service requires a valid GEMINI_API_KEY on the Spring Boot server."
         },
         suggestedFollowUps: [
@@ -137,7 +135,6 @@ export async function queryAiAssistantAsync(userQuery, language = 'en', history 
       sourceReference: {
         document: "Backend Connection",
         clause: "HTTP 8080",
-        portalUrl: "https://manakonline.in",
         disclaimer: "Unable to reach server."
       }
     };

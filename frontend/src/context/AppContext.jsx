@@ -6,16 +6,33 @@ import {
   fetchConversationById, 
   deleteConversation as deleteConversationApi 
 } from '../services/apiService';
+import {
+  getStoredToken,
+  getStoredUser,
+  login as loginApi,
+  signup as signupApi,
+  logout as logoutApi,
+  getCurrentUser
+} from '../services/authService';
 
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
+  // Navigation & Preferences
   const [activeTab, setActiveTab] = useState('home');
   const [language, setLanguage] = useState('en');
   const [theme, setTheme] = useState('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStandardModal, setActiveStandardModal] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Authentication State
+  const [token, setToken] = useState(() => getStoredToken());
+  const [user, setUser] = useState(() => getStoredUser());
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authView, setAuthView] = useState('login'); // 'login' | 'signup'
+
+  const isAuthenticated = Boolean(token && user);
 
   // Saved Items
   const [savedStandards, setSavedStandards] = useState(() => {
@@ -71,7 +88,6 @@ export function AppProvider({ children }) {
     sourceReference: {
       document: "Bureau of Indian Standards Repository",
       clause: "Official Standards & Gazette Portal",
-      portalUrl: "https://manakonline.in",
       disclaimer: "AI-generated output backed by Bureau of Indian Standards regulatory repository."
     }
   }), [language]);
@@ -79,6 +95,12 @@ export function AppProvider({ children }) {
   // Current Active Chat Messages
   const [messages, setMessages] = useState([createWelcomeMessage()]);
   const [isAiThinking, setIsAiThinking] = useState(false);
+
+  // Helper: Show Toast
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type, id: Date.now() });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
 
   // Apply Theme to DOM
   useEffect(() => {
@@ -121,8 +143,55 @@ export function AppProvider({ children }) {
     }
   }, [conversations]);
 
-  // Sync conversation history from backend on initial mount
+  // Initial Auth Verification
+  useEffect(() => {
+    let isMounted = true;
+
+    const verifySession = async () => {
+      const savedToken = getStoredToken();
+      if (savedToken) {
+        const res = await getCurrentUser(savedToken);
+        if (isMounted) {
+          if (res.success && res.user) {
+            setUser(res.user);
+            setToken(savedToken);
+          } else {
+            setUser(null);
+            setToken(null);
+          }
+        }
+      } else {
+        if (isMounted) {
+          setUser(null);
+          setToken(null);
+        }
+      }
+      if (isMounted) {
+        setAuthLoading(false);
+      }
+    };
+
+    verifySession();
+
+    // Listen to unauthorized 401 events broadcast from apiService
+    const handleUnauthorizedEvent = () => {
+      if (isMounted) {
+        setUser(null);
+        setToken(null);
+        showToast("Session expired. Please sign in again.", "info");
+      }
+    };
+
+    window.addEventListener('bis-auth-unauthorized', handleUnauthorizedEvent);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('bis-auth-unauthorized', handleUnauthorizedEvent);
+    };
+  }, [showToast]);
+
+  // Sync conversation history from backend ONLY when authenticated
   const refreshConversationsFromBackend = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const serverConvs = await fetchConversations();
       if (Array.isArray(serverConvs) && serverConvs.length > 0) {
@@ -138,11 +207,42 @@ export function AppProvider({ children }) {
     } catch (e) {
       console.warn("Could not sync conversations from backend:", e);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    refreshConversationsFromBackend();
-  }, [refreshConversationsFromBackend]);
+    if (isAuthenticated) {
+      refreshConversationsFromBackend();
+    }
+  }, [isAuthenticated, refreshConversationsFromBackend]);
+
+  // Authentication Handlers
+  const login = async (email, password) => {
+    const res = await loginApi(email, password);
+    if (res.success && res.token && res.user) {
+      setToken(res.token);
+      setUser(res.user);
+    }
+    return res;
+  };
+
+  const signup = async (fullName, email, password) => {
+    const res = await signupApi(fullName, email, password);
+    if (res.success && res.token && res.user) {
+      setToken(res.token);
+      setUser(res.user);
+    }
+    return res;
+  };
+
+  const logout = () => {
+    logoutApi();
+    setToken(null);
+    setUser(null);
+    setConversations([]);
+    setAuthView('login');
+    startNewChat();
+    showToast("Logged out successfully.", "info");
+  };
 
   // Extract a clean meaningful title from user query
   const extractTitleFromQuery = (text) => {
@@ -152,12 +252,6 @@ export function AppProvider({ children }) {
       return clean.substring(0, 36).trim() + "...";
     }
     return clean;
-  };
-
-  // Helper: Show Toast
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type, id: Date.now() });
-    setTimeout(() => setToast(null), 3500);
   };
 
   // Start New Chat (ChatGPT-style)
@@ -189,7 +283,6 @@ export function AppProvider({ children }) {
           sourceReference: {
             document: "Bureau of Indian Standards Repository",
             clause: "Official Standards Portal",
-            portalUrl: "https://manakonline.in",
             disclaimer: "AI-generated output backed by Bureau of Indian Standards regulatory repository."
           }
         }));
@@ -353,6 +446,18 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider
       value={{
+        // Auth State & Actions
+        user,
+        token,
+        isAuthenticated,
+        authLoading,
+        authView,
+        setAuthView,
+        login,
+        signup,
+        logout,
+
+        // Navigation & Preferences
         activeTab,
         setActiveTab,
         language,
@@ -395,4 +500,3 @@ export function useApp() {
   }
   return context;
 }
-

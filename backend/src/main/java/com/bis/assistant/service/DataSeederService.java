@@ -6,8 +6,10 @@ import com.bis.assistant.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+import java.io.InputStream;
 import java.util.List;
 
 @Component
@@ -24,6 +26,7 @@ public class DataSeederService implements CommandLineRunner {
     private final ProductRepository productRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final DatabaseMigrationService databaseMigrationService;
+    private final PdfIngestionService pdfIngestionService;
 
     public DataSeederService(StandardRepository standardRepository,
                              CertificationSchemeRepository schemeRepository,
@@ -33,7 +36,8 @@ public class DataSeederService implements CommandLineRunner {
                              BISUpdateRepository updateRepository,
                              ProductRepository productRepository,
                              KnowledgeChunkRepository knowledgeChunkRepository,
-                             DatabaseMigrationService databaseMigrationService) {
+                             DatabaseMigrationService databaseMigrationService,
+                             PdfIngestionService pdfIngestionService) {
         this.standardRepository = standardRepository;
         this.schemeRepository = schemeRepository;
         this.laboratoryRepository = laboratoryRepository;
@@ -43,6 +47,7 @@ public class DataSeederService implements CommandLineRunner {
         this.productRepository = productRepository;
         this.knowledgeChunkRepository = knowledgeChunkRepository;
         this.databaseMigrationService = databaseMigrationService;
+        this.pdfIngestionService = pdfIngestionService;
     }
 
     @Override
@@ -61,6 +66,7 @@ public class DataSeederService implements CommandLineRunner {
                 logger.info("Database seeding completed successfully.");
             } else {
                 logger.info("Database already contains standard records.");
+                seedStandardPdfs();
                 if (laboratoryRepository.count() < 20) {
                     logger.info("Upgrading laboratory repository to full verified BIS recognized laboratory dataset...");
                     laboratoryRepository.deleteAll();
@@ -201,9 +207,67 @@ public class DataSeederService implements CommandLineRunner {
                 "Per-article hallmarking fee"
         );
         s5.addTestingRequirement(new TestingRequirement("Fire Assaying (Cupellation)", "Quantitative assaying of precious metal", "Fineness conformance to declared karatage within permissible tolerance"));
-        s5.setApplicableProducts(List.of("22K Gold Necklaces & Chains", "18K Gold Diamond Studded Rings", "24K Gold Coins & Bullion"));
+        // Standard 6: IS 13450 (Part 1):2018 (Medical Electrical Equipment)
+        Standard s6 = new Standard(
+                "IS-13450-1-2018",
+                "IS 13450 (Part 1) : 2018 / IEC 60601-1",
+                "Medical Electrical Equipment — General Requirements for Basic Safety and Essential Performance",
+                "Medical Equipment (MHD 03)",
+                "Medical Devices & Equipment",
+                "2018",
+                "Active (Mandatory Medical Device Rules)",
+                true,
+                "Scheme-I (ISI Mark) / CDSCO Medical Device Rules",
+                "Medical Devices (Quality Control & Essential Principles) Order",
+                "Specifies general requirements for basic safety and essential performance of medical electrical equipment used for diagnosis, treatment or patient monitoring.",
+                "Type testing at BIS/NABL accredited medical equipment laboratory and grant of BIS license.",
+                "Medical Device concession scheme"
+        );
+        s6.addTestingRequirement(new TestingRequirement("Patient Leakage Current Test", "Clause 8.7", "Leakage current < 10uA (Type CF) and < 100uA (Type BF)"));
+        s6.addTestingRequirement(new TestingRequirement("Dielectric Withstand Voltage", "Clause 8.8", "4000V AC high voltage isolation without breakdown"));
+        s6.setApplicableProducts(List.of("Patient Monitors & ECG Machines", "Infusion Pumps & Syringe Drivers", "Ultrasound Diagnostic Equipment", "Dialysis Machines & Defibrillators"));
 
-        standardRepository.saveAll(List.of(s1, s2, s3, s4, s5));
+        // Standard 7: IS 456:2000 (Plain and Reinforced Concrete)
+        Standard s7 = new Standard(
+                "IS-456-2000",
+                "IS 456 : 2000",
+                "Plain and Reinforced Concrete — Code of Practice (Fourth Revision)",
+                "Civil Engineering (CED 02)",
+                "Construction & Civil Engineering",
+                "2000",
+                "Active (National Building Code Core Standard)",
+                true,
+                "National Building Code (NBC) / Scheme-I Harmonized",
+                "National Building Code & Central Public Works Standard",
+                "Deals with the general structural use of plain and reinforced concrete in buildings, bridges, and infrastructure works.",
+                "RMC plant capability audit, batching accuracy verification, continuous cube strength testing, and BIS certification.",
+                "Infrastructure certification schedule"
+        );
+        s7.addTestingRequirement(new TestingRequirement("28-Day Compressive Strength", "Clause 6 & IS 516", "Characteristic compressive strength for grades M10 to M80"));
+        s7.addTestingRequirement(new TestingRequirement("Workability Slump Test", "IS 1199", "Slump measurement conforming to placement method"));
+        s7.setApplicableProducts(List.of("Ready-Mix Concrete (RMC) Plants", "Precast Concrete Elements & Slabs", "RCC Building Columns & Foundations"));
+
+        // Standard 8: IS 269:2015 (Ordinary Portland Cement)
+        Standard s8 = new Standard(
+                "IS-269-2015",
+                "IS 269 : 2015",
+                "Ordinary Portland Cement (OPC 33, 43, 53 Grade) — Specification (Sixth Revision)",
+                "Civil Engineering (CED 02)",
+                "Construction & Civil Engineering",
+                "2015",
+                "Active (Mandatory QCO)",
+                true,
+                "Scheme-I (ISI Mark)",
+                "Cement (Quality Control) Order",
+                "Covers manufacture and chemical/physical requirements for 33, 43, and 53 grade Ordinary Portland Cement.",
+                "Integrated cement plant inspection, continuous automated laboratory testing, witness sampling, and ISI license grant.",
+                "Mandatory Cement QCO marking fee"
+        );
+        s8.addTestingRequirement(new TestingRequirement("Compressive Strength 28-Day", "Table 2", "53 Grade >= 53 MPa, 43 Grade >= 43 MPa, 33 Grade >= 33 MPa"));
+        s8.addTestingRequirement(new TestingRequirement("Setting Time & Soundness", "Clause 6", "Initial setting time >= 30 min, Le-Chatelier expansion <= 10 mm"));
+        s8.setApplicableProducts(List.of("OPC 53 Grade (High Strength)", "OPC 43 Grade (Structural)", "OPC 33 Grade (Masonry)"));
+
+        standardRepository.saveAll(List.of(s1, s2, s3, s4, s5, s6, s7, s8));
 
         // Seed Product Catalog
         productRepository.saveAll(List.of(
@@ -653,5 +717,44 @@ public class DataSeederService implements CommandLineRunner {
                         "Lithium secondary cells must withstand thermal abuse at 130°C for 10 minutes without fire or explosion, and external short circuit at 55°C.",
                         "Lithium Cell Thermal Safety", "Clause 7.3", "7.3.2", 15, "https://www.crsbis.in")
         ));
+        seedStandardPdfs();
+    }
+
+    private record StandardPdfDefinition(String resourcePath, String documentName, String title, String section) {}
+
+    private void seedStandardPdfs() {
+        List<StandardPdfDefinition> pdfs = List.of(
+                new StandardPdfDefinition("standards/BIS_TED_Knowledge_Base.pdf", "BIS Transport Engineering Department (TED)", "BIS TED Knowledge Base", "Transport Engineering"),
+                new StandardPdfDefinition("standards/BIS_CED_Civil_Engineering_Knowledge_Base.pdf", "BIS Civil Engineering Department (CED)", "BIS CED Civil Engineering Knowledge Base", "Civil Engineering"),
+                new StandardPdfDefinition("standards/BIS_Chemical_Department_CHD_Knowledge_Base.pdf", "BIS Chemical Department (CHD)", "BIS CHD Chemical Department Knowledge Base", "Chemical & Allied Industries"),
+                new StandardPdfDefinition("standards/BIS_Medical_Equipment_Department_MHD_Knowledge_Base.pdf", "BIS Medical Equipment Department (MHD)", "BIS MHD Medical Equipment Knowledge Base", "Medical Equipment & Hospital Planning"),
+                new StandardPdfDefinition("standards/bis_txd_knowledge_base.pdf", "BIS Textiles Department (TXD)", "BIS TXD Textiles Department Knowledge Base", "Textiles & Technical Textiles")
+        );
+
+        for (StandardPdfDefinition pdfDef : pdfs) {
+            try {
+                if (!knowledgeChunkRepository.existsByDocumentIgnoreCase(pdfDef.documentName())) {
+                    ClassPathResource resource = new ClassPathResource(pdfDef.resourcePath());
+                    if (resource.exists()) {
+                        try (InputStream is = resource.getInputStream()) {
+                            byte[] bytes = is.readAllBytes();
+                            String filename = pdfDef.resourcePath().substring(pdfDef.resourcePath().lastIndexOf('/') + 1);
+                            pdfIngestionService.ingestPdf(
+                                    bytes,
+                                    filename,
+                                    pdfDef.documentName(),
+                                    pdfDef.title(),
+                                    pdfDef.section(),
+                                    null,
+                                    false
+                            );
+                            logger.info("Successfully ingested standard PDF: {}", pdfDef.documentName());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("Could not auto-ingest standard PDF '{}': {}", pdfDef.documentName(), e.getMessage());
+            }
+        }
     }
 }

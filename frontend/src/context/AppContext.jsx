@@ -88,7 +88,6 @@ export function AppProvider({ children }) {
     sourceReference: {
       document: "Bureau of Indian Standards Repository",
       clause: "Official Standards & Gazette Portal",
-      portalUrl: "https://manakonline.in",
       disclaimer: "AI-generated output backed by Bureau of Indian Standards regulatory repository."
     }
   }), [language]);
@@ -284,7 +283,6 @@ export function AppProvider({ children }) {
           sourceReference: {
             document: "Bureau of Indian Standards Repository",
             clause: "Official Standards Portal",
-            portalUrl: "https://manakonline.in",
             disclaimer: "AI-generated output backed by Bureau of Indian Standards regulatory repository."
           }
         }));

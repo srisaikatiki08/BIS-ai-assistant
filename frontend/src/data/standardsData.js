@@ -623,6 +623,212 @@ export const STANDARDS_DATABASE = [
     relatedStandards: ["IS 2062 (Structural Steel)", "IS 1608 (Tensile Test)", "IS 1599 (Bend Test)"],
     licensingProcess: "Primary/Secondary mill inspection, heat-wise traceability audit, spectrometer and UTM lab verification.",
     feeCategory: "Steel QCO mandatory scheme."
+  },
+  {
+    id: "IS-13450-1-2018",
+    isNumber: "IS 13450 (Part 1) : 2018 / IEC 60601-1",
+    title: "Medical Electrical Equipment — Part 1: General Requirements for Basic Safety and Essential Performance",
+    division: "Medical Equipment (MHD 03)",
+    category: "Medical Devices & Equipment",
+    year: "2018",
+    status: "Active (Mandatory Medical Device Rules)",
+    isMandatory: true,
+    scheme: "Scheme-I (ISI Mark) / CDSCO Medical Device Rules",
+    qcoOrder: "Medical Devices (Quality Control & Essential Principles) Order",
+    scope: "Specifies general requirements for basic safety and essential performance of medical electrical equipment and medical electrical systems used for diagnosis, treatment or monitoring of patients.",
+    keyClauses: [
+      { clause: "Clause 8", title: "Protection Against Electrical Hazards", desc: "Patient leakage current limits (< 10µA for Type CF, < 100µA for Type BF) and double insulation dielectric strength." },
+      { clause: "Clause 9", title: "Protection Against Mechanical Hazards", desc: "Crushing, cutting, impact, and stability test under 10-degree tilt." },
+      { clause: "Clause 11", title: "Protection Against Excessive Temperatures", desc: "Applied part temperature limits (max 41°C for continuous contact) to prevent tissue burn." },
+      { clause: "Clause 14", title: "Programmable Electrical Medical Systems (PEMS)", desc: "Software lifecycle validation, risk management, and cybersecurity verification." }
+    ],
+    testingRequirements: [
+      "Patient auxiliary and touch leakage current test (micro-amperes)",
+      "Dielectric withstand high-voltage test (4000V AC isolation)",
+      "Defibrillation-proof protection test on applied parts",
+      "Thermal mapping and flammability of oxygen-enriched enclosures",
+      "Electromagnetic Compatibility (EMC) per IEC 60601-1-2"
+    ],
+    applicableProducts: [
+      "Patient Monitors & ECG Machines",
+      "Infusion Pumps & Syringe Drivers",
+      "Ultrasound Diagnostic Equipment",
+      "Dialysis Machines & Defibrillators",
+      "Surgical Diathermy & Electrosurgical Generators"
+    ],
+    relatedStandards: ["IEC 60601-1-2 (EMC)", "IS/ISO 14971 (Risk Management)", "IS/ISO 13485 (QMS)"],
+    licensingProcess: "Comprehensive type testing at BIS/NABL accredited medical equipment laboratory, clinical risk management audit, and grant of BIS license.",
+    feeCategory: "Medical Device concession scheme."
+  },
+  {
+    id: "IS-ISO-13485-2016",
+    isNumber: "IS/ISO 13485 : 2016",
+    title: "Medical Devices — Quality Management Systems — Requirements for Regulatory Purposes",
+    division: "Medical Equipment (MHD 18)",
+    category: "Medical Devices & Equipment",
+    year: "2016",
+    status: "Active (National Standard / CDSCO Harmonized)",
+    isMandatory: true,
+    scheme: "Management Systems Certification Scheme (MSCS)",
+    qcoOrder: "Medical Device Rules (MDR) Quality Management Standard",
+    scope: "Specifies requirements for a quality management system where an organization needs to demonstrate its ability to provide medical devices and related services that consistently meet customer and applicable regulatory requirements.",
+    keyClauses: [
+      { clause: "Clause 4", title: "Quality Management System & Documentation", desc: "Medical device file, contamination control, and sterile barrier validation records." },
+      { clause: "Clause 6", title: "Resource Management & Cleanroom Controls", desc: "Infrastructure, work environment cleanliness (ISO Class 7/8), and personnel hygiene controls." },
+      { clause: "Clause 7", title: "Product Realization & Design Controls", desc: "Design verification, validation, risk management (ISO 14971), and traceability of implantable parts." },
+      { clause: "Clause 8", title: "Measurement, Analysis & Post-Market Surveillance", desc: "Feedback systems, complaint handling, vigilance reporting to regulatory authorities." }
+    ],
+    testingRequirements: [
+      "Stage 1 Cleanroom and Quality Manual Audit",
+      "Stage 2 Process validation & traceability audit",
+      "Sterilization validation (EO / Gamma / Steam)",
+      "Bio-burden and endotoxin testing verification"
+    ],
+    applicableProducts: [
+      "Orthopedic Implants & Bone Screws",
+      "In-Vitro Diagnostic (IVD) Kits & Reagents",
+      "Sterile Hypodermic Syringes & Needles",
+      "Catheters & Cardiovascular Stents"
+    ],
+    relatedStandards: ["ISO 14971 (Risk Management)", "ISO 11135 (Ethylene Oxide)", "IS/ISO 9001"],
+    licensingProcess: "On-site cleanroom facility audit, sterilization protocol verification, and issuance of ISO 13485 certification.",
+    feeCategory: "Medical Device manufacturer audit fee schedule."
+  },
+  {
+    id: "IS-456-2000",
+    isNumber: "IS 456 : 2000",
+    title: "Plain and Reinforced Concrete — Code of Practice (Fourth Revision)",
+    division: "Civil Engineering (CED 02)",
+    category: "Construction & Civil Engineering",
+    year: "2000",
+    status: "Active (National Building Code Core Standard)",
+    isMandatory: true,
+    scheme: "National Building Code (NBC) / Scheme-I Harmonized",
+    qcoOrder: "National Building Code & Central Public Works Standard",
+    scope: "Deals with the general structural use of plain and reinforced concrete in buildings, bridges, and infrastructure works. Covers design principles, materials selection, durability, mix design, workmanship, and load testing.",
+    keyClauses: [
+      { clause: "Clause 5", title: "Materials & Quality", desc: "Specifications for cement, aggregates, water, admixtures, and steel reinforcement." },
+      { clause: "Clause 6", title: "Concrete Grades & Mix Design", desc: "Characteristic compressive strength for grades M10 to M80 at 28 days." },
+      { clause: "Clause 8", title: "Durability Requirements", desc: "Minimum cement content, maximum water-cement ratio, and minimum grade of concrete for exposure conditions (Mild to Extreme)." },
+      { clause: "Clause 26", title: "Requirements for Reinforcement Detailing", desc: "Minimum and maximum reinforcement, bar spacing, lap length, and nominal concrete cover." },
+      { clause: "Clause 35", title: "Limit State Design Principles", desc: "Limit state of collapse (flexure, compression, shear, torsion) and serviceability (deflection, cracking)." }
+    ],
+    testingRequirements: [
+      "28-day concrete cube compressive strength test (150mm cubes)",
+      "Slump cone workability and flow table test",
+      "Rapid Chloride Permeability Test (RCPT) for marine durability",
+      "Ultrasonic Pulse Velocity (UPV) non-destructive concrete testing",
+      "Core extraction and in-situ strength evaluation"
+    ],
+    applicableProducts: [
+      "Ready-Mix Concrete (RMC) Plants",
+      "Precast Concrete Elements & Slabs",
+      "RCC Building Columns, Beams & Foundations",
+      "Bridge Piers & Highway Flyovers"
+    ],
+    relatedStandards: ["IS 516 (Methods of Test for Strength)", "IS 10262 (Concrete Mix Design)", "IS 1786 (TMT Steel)"],
+    licensingProcess: "RMC plant capability audit, batching accuracy verification, continuous cube strength testing, and BIS certification.",
+    feeCategory: "Infrastructure certification schedule."
+  },
+  {
+    id: "IS-269-2015",
+    isNumber: "IS 269 : 2015",
+    title: "Ordinary Portland Cement (OPC 33, 43, 53 Grade) — Specification (Sixth Revision)",
+    division: "Civil Engineering (CED 02)",
+    category: "Construction & Civil Engineering",
+    year: "2015",
+    status: "Active (Mandatory QCO)",
+    isMandatory: true,
+    scheme: "Scheme-I (ISI Mark)",
+    qcoOrder: "Cement (Quality Control) Order",
+    scope: "Covers manufacture and chemical/physical requirements for 33, 43, and 53 grade Ordinary Portland Cement used in general concrete construction and high-strength structural engineering.",
+    keyClauses: [
+      { clause: "Clause 5", title: "Chemical Requirements", desc: "Ratio of percentage of lime to silica, alumina and iron oxide (LSF 0.66-1.02), insoluble residue (max 5%), magnesia (max 6%), and total sulfur (max 3.5%)." },
+      { clause: "Clause 6", title: "Physical Requirements", desc: "Fineness by Blaine air permeability (min 225 m²/kg), initial setting time (min 30 min), final setting time (max 600 min), and soundness by Le Chatelier (max 10mm)." },
+      { clause: "Table 2", title: "Compressive Strength", desc: "53 Grade: 3 days ≥ 27 MPa, 7 days ≥ 37 MPa, 28 days ≥ 53 MPa." }
+    ],
+    testingRequirements: [
+      "Blaine air permeability fineness test",
+      "Vicat apparatus setting time determination",
+      "Le-Chatelier and Autoclave soundness expansion test",
+      "Mortar cube compressive strength test (at 72h, 168h, 672h)",
+      "XRF / Wet chemical analysis for oxide ratios"
+    ],
+    applicableProducts: [
+      "Ordinary Portland Cement 53 Grade (High Strength)",
+      "Ordinary Portland Cement 43 Grade (General Structural)",
+      "Ordinary Portland Cement 33 Grade (Masonry & Plaster)"
+    ],
+    relatedStandards: ["IS 4031 (Methods of Physical Tests for Cement)", "IS 4032 (Chemical Analysis of Cement)", "IS 456"],
+    licensingProcess: "Integrated cement plant inspection, continuous automated laboratory testing, witness sampling, and ISI license grant.",
+    feeCategory: "Mandatory Cement QCO marking fee."
+  },
+  {
+    id: "IS-4707-2020",
+    isNumber: "IS 4707 (Part 1 & 2) : 2020",
+    title: "Classification for Raw Materials and Colourants Used in Cosmetics",
+    division: "Chemical (CHD 25)",
+    category: "Chemical & Cosmetics",
+    year: "2020",
+    status: "Active (Mandatory Drugs & Cosmetics Rule)",
+    isMandatory: true,
+    scheme: "Scheme-I (ISI Mark) / CDSCO Cosmetics Harmonized",
+    qcoOrder: "Cosmetics Rules, 2020 & BIS Chemical Quality Framework",
+    scope: "Prescribes list of dyes, colours, pigments and raw materials that are generally recognized as safe for use in cosmetic formulations, together with lists of prohibited and restricted substances.",
+    keyClauses: [
+      { clause: "Part 1 / Table 1", title: "Permitted Dyes and Pigments", desc: "Colour Index (CI) numbers and purity criteria for eye, skin, and mucosal area contact." },
+      { clause: "Part 2 / Annex A", title: "Prohibited Substances in Cosmetics", desc: "Over 1300 toxic chemicals, heavy metals, and carcinogens prohibited from cosmetic formulations." },
+      { clause: "Part 2 / Annex B", title: "Restricted Ingredients & Preservatives", desc: "Maximum allowable concentrations for preservatives (e.g., Parabens, Phenoxyethanol, Triclosan)." }
+    ],
+    testingRequirements: [
+      "Heavy metals determination (Lead < 20ppm, Arsenic < 2ppm, Mercury < 1ppm) by ICP-MS",
+      "GC-MS quantification of restricted preservatives",
+      "Microbiological purity testing (Aerobic plate count and specific pathogens)",
+      "Skin irritation and ocular tolerance safety evaluation"
+    ],
+    applicableProducts: [
+      "Skin Creams, Lotions & Moisturizers",
+      "Lipsticks, Lip Balms & Eye Makeup",
+      "Shampoos, Hair Conditioners & Dyes",
+      "Sunscreens & Anti-Aging Serums"
+    ],
+    relatedStandards: ["IS 6608 (Skin Creams)", "IS 9875 (Lipstick)", "IS 4011 (Safety Evaluation of Cosmetics)"],
+    licensingProcess: "Formulation ingredient audit, laboratory toxicological analysis, factory GMP verification, and BIS licensing.",
+    feeCategory: "Cosmetics certification schedule."
+  },
+  {
+    id: "IS-16391-2015",
+    isNumber: "IS 16391 : 2015",
+    title: "Geosynthetics — Geotextiles for Subgrade Stabilization in Pavement Structures — Specification",
+    division: "Textiles & Leather (TXD 30)",
+    category: "Technical Textiles & Geosynthetics",
+    year: "2015",
+    status: "Active (Mandatory Technical Textiles QCO)",
+    isMandatory: true,
+    scheme: "Scheme-I (ISI Mark)",
+    qcoOrder: "Technical Textiles (Geo-textiles) Quality Control Order",
+    scope: "Specifies requirements for woven and non-woven polymeric geotextiles used for separation, filtration, and stabilization of subgrade soil in highways, railways, and airport runways.",
+    keyClauses: [
+      { clause: "Clause 5.1", title: "Polymer Composition", desc: "Manufactured from 100% virgin polypropylene (PP) or polyester (PET) filaments with UV stabilization." },
+      { clause: "Table 1", title: "Mechanical Properties", desc: "Grab tensile strength (min 700N to 1400N), trapezoidal tear strength, and CBR puncture resistance (min 1500N to 3000N)." },
+      { clause: "Table 2", title: "Hydraulic Characteristics", desc: "Apparent Opening Size (AOS, O95 < 0.25mm) and water permittivity (min 0.05 s⁻¹)." }
+    ],
+    testingRequirements: [
+      "Grab & Wide-width tensile strength test (UTM per IS 13162 Part 5)",
+      "CBR static puncture resistance test (IS 13162 Part 4)",
+      "Apparent opening size (AOS) dry sieving test",
+      "Water flow permittivity under constant head",
+      "UV weatherometer degradation resistance (500 hours exposure)"
+    ],
+    applicableProducts: [
+      "Non-Woven Needle Punched Highway Geotextiles",
+      "Woven Polypropylene Subgrade Reinforcement Fabrics",
+      "Railway Track Bed Separation Geotextiles",
+      "Airport Runway Stabilization Geogrids"
+    ],
+    relatedStandards: ["IS 13162 (Methods of Test for Geotextiles)", "IS 16393", "IRC:SP:59"],
+    licensingProcess: "Textile manufacturing plant inspection, raw polymer traceability, in-house tensile and hydraulic testing, and ISI license grant.",
+    feeCategory: "Technical Textiles QCO schedule."
   }
 ];
 

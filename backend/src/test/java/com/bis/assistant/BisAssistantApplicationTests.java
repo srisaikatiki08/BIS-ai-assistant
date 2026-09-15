@@ -133,6 +133,30 @@ class BisAssistantApplicationTests {
     }
 
     @Test
+    void corsPreflightRequestAllowedForVercelProductionFrontend() throws Exception {
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "https://bis-ai-assistant-nine.vercel.app")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type, Authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://bis-ai-assistant-nine.vercel.app"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")));
+    }
+
+    @Test
+    void corsPreflightRequestAllowedForVercelProductionSignup() throws Exception {
+        mockMvc.perform(options("/api/auth/signup")
+                        .header("Origin", "https://bis-ai-assistant-nine.vercel.app")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type, Authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://bis-ai-assistant-nine.vercel.app"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")));
+    }
+
+    @Test
     void corsPreflightRequestAllowedForLocalhost5174() throws Exception {
         mockMvc.perform(options("/api/chat")
                         .header("Origin", "http://localhost:5174")
@@ -211,6 +235,15 @@ class BisAssistantApplicationTests {
         var chunks = knowledgeRetrievalService.retrieveRelevantChunks("What are the EV swapping safety limits?");
         assertThat(chunks).isNotEmpty();
         assertThat(chunks.stream().anyMatch(c -> "IS 17017:2026".equals(c.getDocument()))).isTrue();
+    }
+
+    @Test
+    void corsActualRequestAllowedForVercelProductionFrontend() throws Exception {
+        mockMvc.perform(get("/api/health")
+                        .header("Origin", "https://bis-ai-assistant-nine.vercel.app"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://bis-ai-assistant-nine.vercel.app"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 
     @Test

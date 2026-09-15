@@ -1,10 +1,11 @@
 // BIS Intelligent Assistant - Full Stack API Service
-// Connects React Frontend to Java Spring Boot Backend (http://localhost:8080) with PostgreSQL Database
+// Connects React Frontend to Java Spring Boot Backend with PostgreSQL Database
 // Handles JWT Authorization headers and 401 token expiration handling
 
 import { getStoredToken, clearStoredAuth } from './authService';
 
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+const RAW_BACKEND_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+const BACKEND_BASE_URL = RAW_BACKEND_URL.replace(/\/+$/, '');
 
 /**
  * Helper to build headers with Authorization Bearer token for protected endpoints.
@@ -86,7 +87,7 @@ export async function sendChatMessage(message, language = 'en', history = [], se
     console.warn("Backend API request failed:", err.message);
     return {
       success: false,
-      error: "Unable to connect to Java Spring Boot backend. Please ensure the backend is running on http://localhost:8080.",
+      error: "Unable to connect to the BIS backend service. Please verify your internet connection or check server availability.",
       networkError: true
     };
   }

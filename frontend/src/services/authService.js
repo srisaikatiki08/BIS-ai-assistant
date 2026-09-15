@@ -1,7 +1,8 @@
 // BIS Intelligent Assistant - Frontend Authentication Service
 // Communicates with Spring Boot JWT Endpoints (/api/auth)
 
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+const RAW_BACKEND_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+const BACKEND_BASE_URL = RAW_BACKEND_URL.replace(/\/+$/, '');
 
 export const AUTH_TOKEN_KEY = 'bis_auth_token';
 export const AUTH_USER_KEY = 'bis_auth_user';

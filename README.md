@@ -1,199 +1,314 @@
 # BIS Intelligent Assistant (भारतीय मानक ब्यूरो - AI सहचर)
 
-A modern, full-stack regulatory and compliance intelligence web application for the **Bureau of Indian Standards (BIS)**, Ministry of Consumer Affairs, Food & Public Distribution, Government of India.
+A modern, full-stack regulatory and compliance intelligence platform for the **Bureau of Indian Standards (BIS)**, Ministry of Consumer Affairs, Food & Public Distribution, Government of India.
 
-The platform provides intelligent guidance on Indian Standards (IS), mandatory Quality Control Orders (QCOs), testing protocols, certification schemes (Scheme-I ISI Mark, Scheme-II CRS, FMCS, Hallmarking HUID, LRS), and consumer affairs.
-
----
-
-## 🏛️ System Architecture
-
-```
-                                  FULL-STACK ARCHITECTURE
-                                  
-   ┌────────────────────────┐
-   │      Web Browser       │
-   │  (React 18 + Vite UI)  │ ◄─── http://localhost:5173
-   └───────────┬────────────┘
-               │
-               │  • POST /api/chat (session-aware Gemini AI query)
-               │  • GET  /api/standards (Indian Standards catalog)
-               │  • GET  /api/services, /api/laboratories, /api/updates
-               │  • GET  /api/health
-               ▼
-   ┌────────────────────────┐
-   │   Java Spring Boot     │
-   │      REST Backend      │ ◄─── http://localhost:8080
-   │  (Port 8080, Maven)    │
-   └─────┬────────────┬─────┘
-         │            │
-         │            │ 1. Injects BIS Domain Grounding & Session History
-         │            │ 2. Reads GEMINI_API_KEY from Server Environment
-         │            ▼
-         │     ┌────────────────────────┐
-         │     │    Google Gemini API   │
-         │     │  (gemini-2.5-flash)    │ ◄─── https://generativelanguage.googleapis.com
-         │     └────────────────────────┘
-         │
-         │ Spring Data JPA / Hibernate (ddl-auto=update)
-         ▼
-   ┌────────────────────────┐
-   │     PostgreSQL 18      │
-   │      Database          │ ◄─── bis_assistant (port 5432)
-   │  (Entities & History)  │
-   └────────────────────────┘
-```
-
-### Key Architectural Principles:
-1. **Zero Secret Exposure**: The Gemini API key and database passwords are never bundled in frontend JavaScript or stored in browser `localStorage`. They are securely read by Spring Boot from server environment variables `GEMINI_API_KEY`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
-2. **PostgreSQL 18 Relational Data Model**: 12 JPA Entities with proper relationships (`Standard`, `StandardDocument`, `TestingRequirement`, `CertificationScheme`, `Product`, `Laboratory`, `BISService`, `HallmarkingInformation`, `BISUpdate`, `KnowledgeChunk`, `Conversation`, `Message`).
-3. **Automatic Database Seeding**: On first run, Spring Boot seeds authentic verified BIS standards, accredited laboratories, services, hallmarking rules, and gazette notifications into PostgreSQL.
-4. **Authentic AI Generation**: Chat answers are generated directly by Google Gemini with BIS domain grounding. Hardcoded fake keyword responses (`if question contains earphones`) are completely eliminated; if the AI service or key is unavailable, an honest status message is returned.
-5. **Session & Message Persistence**: All chat messages and conversations are persisted in PostgreSQL tables (`conversations`, `messages`).
+The platform combines **Retrieval-Augmented Generation (RAG)**, an **ordered multi-model Google Gemini fallback architecture**, and authenticated conversation persistence to provide guidance on Indian Standards (IS), mandatory Quality Control Orders (QCOs), testing protocols, certification schemes (Scheme-I ISI Mark, Scheme-II CRS, FMCS, Hallmarking HUID), and consumer protection services.
 
 ---
 
-## 📋 Prerequisites (Windows)
+## 🚀 Live Demo
 
-Make sure the following software is installed on your Windows machine:
-
-1. **PostgreSQL 18**: Running as a Windows service on default port `5432`.
-   - Target database: `bis_assistant`
-2. **Java JDK**: Java 17 or higher (tested with Java 20.0.1)
-   - Verify in PowerShell/CMD:
-     ```powershell
-     java -version
-     ```
-3. **Node.js & npm**: Node.js v18+ (tested with v24.19.0)
-   - Verify in PowerShell/CMD:
-     ```powershell
-     node -v
-     npm -v
-     ```
-4. **Google Gemini API Key**:
-   - Obtain an API key from [Google AI Studio](https://aistudio.google.com/).
-
----
-
-## ⚙️ Configuration & Environment Variables
-
-Configure environment variables in your Windows terminal or `.env` before launching the backend:
-
-| Variable | Description | Default Value |
+| Component | Provider | Live URL |
 | :--- | :--- | :--- |
-| `DB_URL` | PostgreSQL JDBC Connection URL | `jdbc:postgresql://localhost:5432/bis_assistant` |
-| `DB_USERNAME` | PostgreSQL User | `postgres` |
-| `DB_PASSWORD` | PostgreSQL Password | *(your postgres password)* |
-| `GEMINI_API_KEY` | Google Gemini API Key | *(required for AI chat)* |
-| `GEMINI_MODEL` | Gemini Model Name | `gemini-2.5-flash` |
-| `SERVER_PORT` | Backend Server Port | `8080` |
+| **Frontend Web App** | Vercel | [https://bis-ai-assistant-nine.vercel.app](https://bis-ai-assistant-nine.vercel.app) |
+| **Backend REST API** | Render | [https://bis-ai-assistant-backend.onrender.com](https://bis-ai-assistant-backend.onrender.com) |
+| **System Health Check** | Render | [https://bis-ai-assistant-backend.onrender.com/api/health](https://bis-ai-assistant-backend.onrender.com/api/health) |
 
-### Setting Environment Variables in PowerShell:
-```powershell
-$env:DB_URL="jdbc:postgresql://localhost:5432/bis_assistant"
-$env:DB_USERNAME="postgres"
-$env:DB_PASSWORD="your_postgres_password"
-$env:GEMINI_API_KEY="your_actual_gemini_api_key"
+---
+
+## ✨ Features
+
+### 🧠 AI & RAG Intelligence
+- **Domain-Grounded Question Answering**: Chat queries are answered using BIS standards and knowledge-base documents, testing requirements, and regulatory gazette data.
+- **RAG Knowledge Pipeline**: Dynamic retrieval of relevant `KnowledgeChunk` records from PostgreSQL based on user queries.
+- **PDF Document Ingestion**: Upload standard PDFs with automated text extraction, section identification, and chunking via Apache PDFBox.
+- **Source Citations**: Answers include structured references (`[Source 1]`, `[Source 2]`) linking back to standard numbers, clauses, and portal URLs.
+- **Multi-Model Gemini Fallback**: Configurable ordered sequential fallback cascade across 6 Gemini models to ensure high availability.
+
+### 🔐 User & Conversation Management
+- **JWT Authentication**: Stateless authentication with BCrypt password hashing and bearer token verification.
+- **User-Scoped Conversations**: Authenticated users access their own private chat sessions and history.
+- **Message Persistence**: Multi-turn dialogue history is persisted in PostgreSQL.
+
+### 🏛️ BIS Domain Catalog & Services
+- **Indian Standards Catalog**: Searchable repository of Indian Standards (IS codes, titles, departments, scopes).
+- **Certification Schemes**: Guidance on Scheme-I (ISI Mark), Scheme-II (Compulsory Registration Scheme - CRS), FMCS, and Hallmarking.
+- **Testing Laboratories**: Directory of Central, Regional, Branch, and recognized partner testing laboratories.
+- **Regulatory Updates & QCOs**: Tracking mandatory Quality Control Orders and Gazette notifications.
+- **Product Catalog**: Standard mapping for consumer and industrial products.
+- **Gold & Silver Hallmarking**: 6-digit HUID guidelines, purity grades, and assay center rules.
+
+---
+
+## 🏗️ Architecture
+
+```
+                                  SYSTEM ARCHITECTURE
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │                    Web Browser Client                       │
+   │               (React 18 + Vite UI on Vercel)                │
+   │           https://bis-ai-assistant-nine.vercel.app          │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  │
+                                  │ HTTPS REST / Bearer JWT
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                  Spring Boot 3.3.4 Backend                  │
+   │                  (Deployed on Render)                       │
+   │         https://bis-ai-assistant-backend.onrender.com       │
+   │                                                             │
+   │  ├── Security & JWT Filter (Stateless Sessions)             │
+   │  ├── Auth & User Controller (/api/auth)                     │
+   │  ├── Conversation Controller (/api/conversations)           │
+   │  ├── BIS Catalog & Standard Controller (/api/standards)     │
+   │  ├── PDF Knowledge Ingestion Service (/api/knowledge/upload)│
+   │  ├── RAG Knowledge Retrieval Service                        │
+   │  └── Gemini Model Fallback Router                           │
+   └──────────────┬───────────────────────────────┬──────────────┘
+                  │                               │
+   Spring Data JPA│                               │ HTTPS / JSON Payload
+   Hibernate (DDL)│                               │ (Reused Grounded Prompt)
+                  ▼                               ▼
+   ┌──────────────────────────────┐ ┌─────────────────────────────┐
+   │        PostgreSQL 18         │ │    Google Gemini API        │
+   │     (Render PostgreSQL)      │ │ Ordered Fallback Cascade:   │
+   │                              │ │                             │
+   │ • Users & Profiles           │ │ 1. gemini-3.6-flash (Primary│
+   │ • Conversations & Messages   │ │       ↓ failure (503/429)   │
+   │ • RAG Knowledge Chunks       │ │ 2. gemini-3.8-flash         │
+   │ • Standards Catalog (IS)     │ │       ↓ failure (503/429)   │
+   │ • Services & Schemes         │ │ 3. gemini-3.7-flash         │
+   │ • Laboratories & Updates     │ │       ↓ failure (503/429)   │
+   │ • Products & Hallmarking     │ │ 4. gemini-3-flash-preview   │
+   │                              │ │       ↓ failure (503/429)   │
+   │                              │ │ 5. gemini-3.5-flash-lite    │
+   │                              │ │       ↓ failure (503/429)   │
+   │                              │ │ 6. gemini-2.5-flash-lite    │
+   └──────────────────────────────┘ └─────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Running the Application
+## 🧠 AI + RAG Pipeline
 
-### 1. Initialize Database (One-time)
-If the database `bis_assistant` does not already exist in PostgreSQL, create it once:
-```powershell
-& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -c "CREATE DATABASE bis_assistant;"
+```
+  BIS PDF Documents (e.g. IS 4151, IS 17017)
+              │
+              ▼
+   PDF Ingestion & Text Extraction (Apache PDFBox 3.0)
+              │
+              ▼
+   Section, Clause & Page-Aware Text Chunking
+              │
+              ▼
+   PostgreSQL `knowledge_chunks` Persistence
+              │
+              │ (User asks compliance question)
+              ▼
+   Knowledge Retrieval (Keyword & Section Matching) ◄── [Performed ONCE]
+              │
+              ▼
+   Construct Grounded System Instruction & Context  ◄── [Built ONCE]
+              │
+              ▼
+   Gemini Model Router (Ordered Fallback Cascade)
+      ├── 1. Try gemini-3.6-flash
+      │        ├── Success ──► Return generated answer
+      │        └── Retryable error (503 / 429 / 502 / timeout)
+      │                 │
+      │                 ▼
+      ├── 2. Try gemini-3.8-flash (Reuses same prompt)
+      │        ├── Success ──► Return generated answer
+      │        └── Retryable error
+      │                 │
+      │                 ▼
+      └── 3. Cascade to remaining configured models in sequence
+              │
+              ▼
+   Extract & Validate `[Source N]` Citations
+              │
+              ▼
+   Return Structured Answer with BIS Source References to Frontend
 ```
 
-### 2. Start the Java Spring Boot Backend
-Open a PowerShell terminal in the `backend/` directory:
-
-```powershell
-cd backend
-$env:DB_PASSWORD="your_postgres_password"
-$env:GEMINI_API_KEY="your_actual_gemini_api_key"
-.\mvnw.cmd spring-boot:run
-```
-
-Or run the compiled production JAR:
-```powershell
-java -jar target\bis-intelligent-assistant-backend-1.0.0.jar
-```
-
-The backend starts at `http://localhost:8080` and creates all database tables automatically.
-
-### 3. Start the React + Vite Frontend
-Open a separate PowerShell terminal in the `frontend/` directory:
-
-```powershell
-cd frontend
-npm run dev
-```
-
-Open your browser at `http://localhost:5173`.
+### Fallback Strategy Highlights:
+- **Single Context Retrieval**: RAG retrieval runs **once** per request. The constructed prompt is reused across fallback attempts without repeated database reads.
+- **Fail-Fast Safety**: Authentication/permission errors (`HTTP 401`, `HTTP 403`) or malformed payloads (`HTTP 400`) fail fast immediately without wasting calls on subsequent models.
+- **Transient Error Failover**: Overloaded states (`HTTP 503`), rate limits (`HTTP 429`), gateway issues (`HTTP 502/504/500`), model not found (`HTTP 404`), and connection/read timeouts trigger automatic failover to the next candidate model in the configured fallback list.
+- **No Retry Storms**: Each model is attempted at most once per request.
+- **Automated Test Coverage**: The ordered multi-model fallback logic and failover scenarios are covered by automated unit and integration tests.
 
 ---
 
-## 📡 REST API Documentation
+## 🔐 Authentication & Security
 
-| Endpoint | Method | Description |
-| :--- | :---: | :--- |
-| `/api/health` | `GET` | Health check reporting backend status, PostgreSQL connectivity, and Gemini key configuration |
-| `/api/chat` | `POST` | Process chat question, persist to DB, and return Gemini response |
-| `/api/test-gemini` | `POST` | Tests Gemini connectivity with a ping prompt |
-| `/api/standards` | `GET` | Retrieve all Indian Standards from database |
-| `/api/standards/{id}` | `GET` | Retrieve single Indian Standard by database ID |
-| `/api/standards/search?query=...` | `GET` | Search standards by title, number, category, or scope |
-| `/api/services` | `GET` | Retrieve BIS services catalog |
-| `/api/certification-schemes` | `GET` | Retrieve certification schemes (ISI, CRS, FMCS, Hallmarking) |
-| `/api/laboratories` | `GET` | Retrieve BIS Central, Regional, and recognized testing labs |
-| `/api/updates` | `GET` | Retrieve Gazette Quality Control Order updates and notifications |
-| `/api/products` | `GET` | Retrieve product catalog with applicable standards |
-| `/api/hallmarking` | `GET` | Retrieve 6-digit HUID gold and silver hallmarking rules |
-| `/api/conversations` | `GET` | Retrieve saved chat conversation sessions |
-| `/api/conversations/{sessionId}` | `GET` | Retrieve single chat conversation session with messages |
-| `/api/conversations/{sessionId}` | `DELETE` | Delete conversation session |
-| `/api/knowledge/upload` | `POST` | Upload and ingest BIS PDF document into PostgreSQL KnowledgeChunks for RAG |
-| `/api/status` | `GET` | Basic service status check |
+```
+User (Login / Signup)
+        │
+        ▼
+POST /api/auth/login
+        │
+        ▼
+Spring Security (BCrypt Password Verification)
+        │
+        ▼
+Issue Signed JWT Token (JJWT 0.12.6)
+        │
+        ▼
+Frontend stores token & attaches `Authorization: Bearer <JWT_TOKEN>`
+        │
+        ▼
+JwtAuthenticationFilter verifies token on protected endpoints
+        │
+        ▼
+User-Specific Conversation Isolation & Message Persistence
+```
+
+### Security Highlights:
+- **Server-Side Credentials**: `GEMINI_API_KEY`, database credentials, and JWT signing keys exist only in the server-side environment.
+- **Frontend Safe**: No secret keys, API credentials, or database connection strings are bundled in client JavaScript.
+- **API Key Redaction**: Low-level HTTP transport and logger sanitize error messages, replacing any credential strings with `[REDACTED_API_KEY]`.
+- **CORS Restricted**: Allowed origins explicitly map to the production Vercel domain and verified local development ports.
+- **User Scoping**: Chat conversations and message histories are strictly scoped to the authenticated user ID.
 
 ---
 
-## 📄 BIS PDF Document Ingestion API (RAG Pipeline)
+## 🛠️ Tech Stack
 
-The backend provides an ingestion endpoint (`POST /api/knowledge/upload`) that extracts text from uploaded PDF standards page-by-page, segments the content into RAG `KnowledgeChunk` records, and persists them to PostgreSQL so they are immediately accessible to the chatbot via `KnowledgeRetrievalService` and `GeminiService`.
+### Frontend
+- **Framework**: React 18.3
+- **Build Tool**: Vite 6.2
+- **Icons**: Lucide React
+- **Styling**: Vanilla CSS (Custom Design System with responsive themes)
 
-### Multipart Form Parameters:
+### Backend
+- **Language**: Java 17+ (production Docker runtime: Eclipse Temurin Java 21)
+- **Framework**: Spring Boot 3.3.4
+- **Security**: Spring Security + JJWT 0.12.6 (Stateless JWT Auth)
+- **Data Access**: Spring Data JPA / Hibernate
+- **PDF Processing**: Apache PDFBox 3.0.3
+- **Build Tool**: Maven (`mvnw`)
+
+### Database
+- **Engine**: PostgreSQL 18 (Render PostgreSQL)
+- **Testing**: H2 In-Memory Database (isolated unit/integration testing)
+
+### AI Integration
+- **API**: Google Gemini REST API (`generateContent`)
+- **Transport**: Spring `RestTemplate` with 10s connect / 30s read timeouts
+- **Model Architecture**: 6-model ordered fallback configuration
+
+### Hosting & Deployment
+- **Frontend**: Vercel
+- **Backend & Database**: Render
+
+---
+
+## 📁 Project Structure
+
+```text
+BIS-ai-assistant/
+├── backend/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/bis/assistant/
+│   │   │   │   ├── config/            # SecurityConfig, CorsConfig, DatabaseMigrationService
+│   │   │   │   ├── controller/        # Auth, Chat, Catalog, Knowledge, Standards
+│   │   │   │   ├── dto/               # Request, Response, and ModelResult DTOs
+│   │   │   │   ├── model/             # 13 JPA Relational Entities
+│   │   │   │   ├── repository/        # Spring Data JPA Repositories
+│   │   │   │   ├── security/          # JwtTokenProvider, JwtAuthenticationFilter
+│   │   │   │   └── service/           # GeminiService, GeminiModelRouter, GeminiClient, RAG
+│   │   │   └── resources/
+│   │   │       └── application.properties
+│   │   └── test/                      # 106 Backend Unit and Integration Tests
+│   ├── pom.xml
+│   ├── Dockerfile
+│   └── setup_database.sql
+├── frontend/
+│   ├── src/
+│   │   ├── components/                # Navigation, ChatInterface, Modals, Auth
+│   │   ├── context/                   # AppContext (Auth, Chat & Theme State)
+│   │   ├── services/                  # apiService, aiAssistantService
+│   │   ├── App.jsx
+│   │   ├── index.css
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
+├── .env.example
+└── README.md
+```
+
+---
+
+## 🗄️ Database Entities (PostgreSQL)
+
+The system uses 13 JPA entities mapped with relational constraints:
+
+1. **`User`**: User account credentials, BCrypt hashed password, email, and registration metadata.
+2. **`Conversation`**: User-scoped conversation thread with session identifiers and titles.
+3. **`Message`**: Chat messages (`user` or `model` role, message body, timestamps).
+4. **`KnowledgeChunk`**: Segmented text chunks from BIS standard PDFs with document, title, section, clause, and page metadata.
+5. **`Standard`**: Indian Standards catalog (IS code, title, department, status, scope, year).
+6. **`StandardDocument`**: Associated downloadable standard documentation.
+7. **`TestingRequirement`**: Specific laboratory test methods, tolerances, and compliance parameters.
+8. **`BISService`**: Core departmental services (Conformity Assessment, Hallmarking, Training).
+9. **`CertificationScheme`**: Information on ISI Mark, CRS, FMCS, and Hallmarking schemes.
+10. **`Laboratory`**: BIS Central, Regional, Branch, and accredited partner laboratories.
+11. **`BISUpdate`**: Gazette notifications, amendments, and mandatory Quality Control Orders (QCOs).
+12. **`Product`**: Product catalog mapped to applicable mandatory and voluntary Indian Standards.
+13. **`HallmarkingInformation`**: Precious metal hallmarking guidelines, assay centers, and HUID rules.
+
+---
+
+## 📡 REST API Reference
+
+| Endpoint | Method | Auth Required | Description |
+| :--- | :---: | :---: | :--- |
+| `/api/health` | `GET` | No | System health, DB connection, active Gemini model check |
+| `/api/status` | `GET` | No | Basic service status check |
+| `/api/gemini/diagnostic` | `GET` | No | Diagnostic connection test reporting safe endpoint status |
+| `/api/test-gemini` | `POST` | No | Executes a minimal ping connectivity test to Gemini |
+| `/api/auth/signup` | `POST` | No | Register a new user account and receive a JWT token |
+| `/api/auth/login` | `POST` | No | Authenticate credentials and receive a JWT token |
+| `/api/auth/me` | `GET` | **Yes** | Get profile of the currently authenticated user |
+| `/api/chat` | `POST` | **Yes** | Submit a compliance question, execute RAG + Gemini fallback, return answer |
+| `/api/conversations` | `GET` | **Yes** | Retrieve all conversation sessions for the authenticated user |
+| `/api/conversations/{sessionId}` | `GET` | **Yes** | Retrieve a single conversation with message history |
+| `/api/conversations/{sessionId}` | `DELETE` | **Yes** | Delete a conversation session |
+| `/api/standards` | `GET` | **Yes** | Retrieve all Indian Standards |
+| `/api/standards/{id}` | `GET` | **Yes** | Retrieve an Indian Standard by database ID |
+| `/api/standards/code/{code}` | `GET` | **Yes** | Retrieve an Indian Standard by IS code (e.g. `IS 4151:2015`) |
+| `/api/standards/search?query=...` | `GET` | **Yes** | Search standards by title, number, department, or scope |
+| `/api/services` | `GET` | **Yes** | Retrieve BIS services catalog |
+| `/api/certification-schemes` | `GET` | **Yes** | Retrieve certification schemes (ISI, CRS, FMCS) |
+| `/api/laboratories` | `GET` | **Yes** | Retrieve laboratory directory |
+| `/api/updates` | `GET` | **Yes** | Retrieve Gazette Quality Control Order updates |
+| `/api/products` | `GET` | **Yes** | Retrieve product catalog with applicable standards |
+| `/api/hallmarking` | `GET` | **Yes** | Retrieve gold and silver hallmarking information |
+| `/api/knowledge/upload` | `POST` | **Yes** | Ingest a BIS PDF standard into PostgreSQL KnowledgeChunks |
+
+---
+
+## 📄 BIS Knowledge Ingestion (RAG)
+
+The backend provides a multipart ingestion endpoint (`POST /api/knowledge/upload`) that parses PDF documents using Apache PDFBox, splits content into clean searchable chunks, and saves them to `knowledge_chunks`.
+
+### Multipart Parameters:
 - `file`: PDF binary file (*required*)
-- `document`: Standard identifier / document name, e.g. `IS 17017:2026` (*optional, defaults to file basename*)
-- `title`: Standard or document title (*optional*)
+- `document`: Standard code, e.g. `IS 17017:2026` (*optional, defaults to filename*)
+- `title`: Title of the standard (*optional*)
 - `section`: Section or category (*optional*)
 - `sourceUrl`: Official BIS / Gazette URL (*optional*)
-- `overwrite`: `true`/`false` (*optional, default `true` — cleanly updates previous chunks for this document*)
+- `overwrite`: `true`/`false` (*optional, default `true`*)
 
-### Example 1: Uploading via PowerShell (Windows)
-```powershell
-$filePath = "C:\path\to\IS_17017_EV_Charging.pdf"
-$form = @{
-    file = Get-Item -Path $filePath
-    document = "IS 17017:2026"
-    title = "Electric Vehicle Conductive Charging System"
-    section = "EV Safety & Battery Swapping"
-    sourceUrl = "https://standardsbis.bsbedge.com"
-    overwrite = "true"
-}
-
-$response = Invoke-RestMethod -Uri "http://localhost:8080/api/knowledge/upload" `
-    -Method Post `
-    -Form $form
-
-$response | ConvertTo-Json
-```
-
-### Example 2: Uploading via cURL
+### Example Upload via cURL:
 ```bash
-curl -X POST "http://localhost:8080/api/knowledge/upload" \
-  -F "file=@/path/to/IS_4151.pdf" \
+curl -X POST "https://bis-ai-assistant-backend.onrender.com/api/knowledge/upload" \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
+  -F "file=@IS_4151_Helmets.pdf" \
   -F "document=IS 4151:2015" \
   -F "title=Protective Helmets for Motorcycle Riders" \
   -F "section=Section 7 Impact Attenuation" \
@@ -201,26 +316,121 @@ curl -X POST "http://localhost:8080/api/knowledge/upload" \
   -F "overwrite=true"
 ```
 
-### Example 3: Postman Setup
-1. **Method**: `POST`
-2. **URL**: `http://localhost:8080/api/knowledge/upload`
-3. **Body**: Select `form-data`
-   - Key: `file` | Type: `File` | Value: Choose your PDF file
-   - Key: `document` | Type: `Text` | Value: `IS 4151:2015`
-   - Key: `title` | Type: `Text` | Value: `Protective Helmets Specification`
-   - Key: `sourceUrl` | Type: `Text` | Value: `https://manakonline.in`
-   - Key: `overwrite` | Type: `Text` | Value: `true`
-4. **Send**.
+---
 
-### Response Format:
-```json
-{
-  "success": true,
-  "document": "IS 17017:2026",
-  "chunksCreated": 18,
-  "totalPages": 5,
-  "message": "Document 'IS 17017:2026' processed successfully with 18 chunks created.",
-  "timestamp": "2026-09-06T12:00:00.000Z"
-}
+## ⚙️ Environment Variables
+
+> [!IMPORTANT]
+> Values shown below are **placeholders only**. Supply actual credentials through server environment variables or server configuration.
+> Never place `GEMINI_API_KEY`, database credentials, JWT signing secrets, or other server-side secrets in frontend `VITE_*` variables. Vite exposes `VITE_*` variables to the client bundle.
+
+| Variable | Scope | Description | Example / Placeholder Value |
+| :--- | :--- | :--- | :--- |
+| `DB_URL` | Backend | PostgreSQL JDBC Connection URL | `jdbc:postgresql://localhost:5432/bis_assistant` |
+| `DB_USERNAME` | Backend | Database username | `postgres` |
+| `DB_PASSWORD` | Backend | Database password | `your_postgres_password` |
+| `GEMINI_API_KEY` | Backend | Google Gemini API Key | `your_gemini_api_key` |
+| `GEMINI_MODELS` | Backend | Ordered comma-separated fallback model list | `gemini-3.6-flash,gemini-3.8-flash,gemini-3.7-flash,gemini-3-flash-preview,gemini-3.5-flash-lite,gemini-2.5-flash-lite` |
+| `GEMINI_MODEL` | Backend | Legacy single-model fallback setting | `gemini-3.6-flash` |
+| `JWT_SECRET` | Backend | JWT token signing key | `your_jwt_secret_key_at_least_32_bytes_long` |
+| `SERVER_PORT` | Backend | Backend server port | `8080` |
+| `VITE_API_BASE_URL`| Frontend | Frontend API target URL | `https://bis-ai-assistant-backend.onrender.com` |
+
+---
+
+## 💻 Local Development
+
+### 1. Prerequisites
+- **Java JDK 17+** (runtime supported on Java 17 - 21)
+- **Node.js v18+ & npm**
+- **PostgreSQL 18** running locally on port `5432`
+
+### 2. Backend Setup
+1. Create the database:
+   ```sql
+   CREATE DATABASE bis_assistant;
+   ```
+2. Navigate to `backend/` and set local environment variables (PowerShell):
+   ```powershell
+   cd backend
+   $env:DB_URL="jdbc:postgresql://localhost:5432/bis_assistant"
+   $env:DB_USERNAME="postgres"
+   $env:DB_PASSWORD="your_postgres_password"
+   $env:GEMINI_API_KEY="your_gemini_api_key"
+   $env:GEMINI_MODELS="gemini-3.6-flash,gemini-3.8-flash,gemini-3.7-flash,gemini-3-flash-preview,gemini-3.5-flash-lite,gemini-2.5-flash-lite"
+   ```
+3. Run the backend:
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+   Backend starts at `http://localhost:8080`.
+
+### 3. Frontend Setup
+1. Navigate to `frontend/`:
+   ```powershell
+   cd frontend
+   npm install
+   ```
+2. Start the Vite development server:
+   ```powershell
+   npm run dev
+   ```
+3. Open `http://localhost:5173` in your browser.
+
+---
+
+## ☁️ Deployment
+
+- **Frontend on Vercel**: Connects directly to the GitHub repository with build command `npm run build` and output directory `dist`. `VITE_API_BASE_URL` is configured in Vercel project environment variables pointing to Render.
+- **Backend on Render**: Deployed as a web service using Maven build command `./mvnw clean package -DskipTests` and start command `java -jar target/bis-intelligent-assistant-backend-1.0.0.jar`.
+- **Database on Render**: Managed PostgreSQL 18 instance with SSL enabled.
+- **AI Credentials**: `GEMINI_API_KEY` and `GEMINI_MODELS` are securely stored in Render environment settings and never exposed to the client.
+
+---
+
+## 🧪 Testing
+
+The backend includes a comprehensive unit and integration test suite:
+
+- **Total Backend Tests**: **106**
+- **Failures / Errors**: **0**
+- **Coverage Highlights**:
+  - Multi-model fallback sequence execution (Models 1 through 6).
+  - High demand (`HTTP 503`), rate limit (`HTTP 429`), and connection timeout failovers.
+  - Fail-fast authentication validation (`HTTP 401/403` and `HTTP 400`).
+  - Single RAG retrieval context reuse verification across model attempts.
+  - Parsing and boundary validation of `[Source N]` citations.
+  - PDF document ingestion, text chunking, and idempotent re-ingestion.
+  - JWT authentication filter, token expiration, and secure endpoints.
+  - PostgreSQL idempotent schema migrations for conversation ownership.
+
+Run the test suite:
+```powershell
+cd backend
+.\mvnw.cmd test
 ```
 
+---
+
+## 🔒 Security & Privacy
+
+- **Server-Side Secret Management**: Keep Google Gemini API keys, PostgreSQL credentials, and JWT secret signing keys strictly on the server side. Secrets are loaded from environment variables and never hardcoded in source files.
+- **Frontend Environment Boundary**: Never place `GEMINI_API_KEY`, database credentials, JWT signing secrets, or other server-side secrets in frontend `VITE_*` variables. Vite exposes `VITE_*` variables to the client bundle.
+- **Credential Placeholders**: All documentation, setup instructions, and cURL snippets use placeholder values (`your_gemini_api_key`, `your_postgres_password`, `<JWT_TOKEN>`).
+- **Error Logging Sanitization**: Low-level HTTP transport and application loggers sanitize API keys and sensitive tokens before writing to log outputs.
+- **Data Privacy & Scoping**: User conversations and messages are isolated and accessible only by the owning authenticated user.
+- **Git History Hygiene**: Never commit `.env` files or real credentials to Git. If a secret is accidentally committed, deleting it from the latest file is not sufficient because it may remain in Git history. Revoke/rotate the exposed credential immediately and clean the repository history when necessary.
+
+---
+
+## 🔮 Future Scope
+
+- **Multilingual RAG Expansion**: Native embeddings and grounding for Indian official languages (Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati).
+- **Automated Gazette Crawling**: Continuous webhook ingestion of newly published Quality Control Orders directly from the official BIS and Ministry portals.
+- **Offline Edge Mode**: Local lightweight model quantization for offline field inspections by BIS officers in remote areas.
+
+---
+
+## 📜 License
+
+This project is developed for educational, compliance intelligence, and innovation purposes in alignment with public standards published by the Bureau of Indian Standards (BIS), Government of India.

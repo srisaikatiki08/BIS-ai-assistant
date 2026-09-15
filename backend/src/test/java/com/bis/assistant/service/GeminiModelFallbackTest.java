@@ -11,13 +11,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
-
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -26,6 +25,15 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class GeminiModelFallbackTest {
+
+    private static final List<String> SIX_PRIORITY_MODELS = List.of(
+            "gemini-3.6-flash",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-3-flash-preview",
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite"
+    );
 
     @Mock
     private BisKnowledgeService bisKnowledgeService;
@@ -43,7 +51,8 @@ class GeminiModelFallbackTest {
 
     @BeforeEach
     void setUp() {
-        geminiModelRouter = new GeminiModelRouter(geminiClient, "gemini-3-flash-preview,gemini-2.5-flash,gemini-2.5-pro");
+        String modelsConfig = String.join(",", SIX_PRIORITY_MODELS);
+        geminiModelRouter = new GeminiModelRouter(geminiClient, modelsConfig);
         geminiService = new GeminiService(bisKnowledgeService, knowledgeRetrievalService, geminiModelRouter, geminiClient);
 
         ReflectionTestUtils.setField(geminiService, "apiKey", "test-valid-api-key");
@@ -66,119 +75,129 @@ class GeminiModelFallbackTest {
     }
 
     @Test
-    @DisplayName("A. First model succeeds -> Returns first model response immediately")
+    @DisplayName("1. First model (gemini-3.6-flash) succeeds -> Returns first model response immediately")
     void firstModelSucceedsImmediately() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.success("According to IS 4151:2015 [Source 1], helmet impact must not exceed 300g.", "gemini-3-flash-preview"));
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.success("According to IS 4151:2015 [Source 1], helmet impact must not exceed 300g.", "gemini-3.6-flash"));
 
         ChatRequest request = new ChatRequest("What is IS 4151 helmet acceleration?", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
 
         assertThat(response.isSuccess()).isTrue();
-        assertThat(response.getModel()).contains("gemini-3-flash-preview");
+        assertThat(response.getModel()).contains("gemini-3.6-flash");
         assertThat(response.getAnswer()).contains("300g");
         assertThat(response.getCitations()).hasSize(1);
         assertThat(response.getCitations().get(0).get("document")).isEqualTo("IS 4151:2015");
 
-        // Verify fallback models were NOT attempted
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
-        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString());
+        // Verify remaining 5 fallback models were NOT attempted
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.5-flash-lite"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-flash-lite"), anyMap(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("B. First model returns HTTP 503 (Overloaded) -> Second model is attempted and succeeds")
+    @DisplayName("2. First model returns HTTP 503 (High Demand) -> Second model (gemini-3.8-flash) is attempted and succeeds")
     void firstModelFails503FallbackSucceeds() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 503, "The model is currently experiencing high demand.", true, false));
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 503, "The model is currently experiencing high demand.", true, false));
 
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.success("IS 4151:2015 [Source 1] specifies motorcycle protective helmets.", "gemini-2.5-flash"));
+        when(geminiClient.callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.success("IS 4151:2015 [Source 1] specifies motorcycle protective helmets.", "gemini-3.8-flash"));
 
         ChatRequest request = new ChatRequest("Explain IS 4151", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
 
         assertThat(response.isSuccess()).isTrue();
-        assertThat(response.getModel()).contains("gemini-2.5-flash");
+        assertThat(response.getModel()).contains("gemini-3.8-flash");
         assertThat(response.getAnswer()).contains("protective helmets");
 
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
-        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("C. First model returns HTTP 429 (Rate Limit / Quota) -> Second model is attempted and succeeds")
+    @DisplayName("3. First model returns HTTP 429 (Rate Limit / Quota) -> Second model is attempted and succeeds")
     void firstModelFails429FallbackSucceeds() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 429, "Resource has been exhausted (e.g. check quota).", true, false));
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 429, "Resource has been exhausted (e.g. check quota).", true, false));
 
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.success("Under IS 4151 [Source 1], tests must verify shell integrity.", "gemini-2.5-flash"));
+        when(geminiClient.callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.success("Under IS 4151 [Source 1], tests must verify shell integrity.", "gemini-3.8-flash"));
 
         ChatRequest request = new ChatRequest("Explain helmet requirements", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
 
         assertThat(response.isSuccess()).isTrue();
-        assertThat(response.getModel()).contains("gemini-2.5-flash");
+        assertThat(response.getModel()).contains("gemini-3.8-flash");
 
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("D. First model times out -> Fallback model is attempted and succeeds")
+    @DisplayName("4. First model times out -> Fallback model is attempted and succeeds")
     void firstModelTimesOutFallbackSucceeds() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 0, "Connection timeout reaching Gemini endpoint", true, false));
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 0, "Connection timeout reaching Gemini endpoint", true, false));
 
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.success("Fallback answer verified with IS 4151 [Source 1].", "gemini-2.5-flash"));
+        when(geminiClient.callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.success("Fallback answer verified with IS 4151 [Source 1].", "gemini-3.8-flash"));
 
         ChatRequest request = new ChatRequest("Helmet impact test query", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
 
         assertThat(response.isSuccess()).isTrue();
-        assertThat(response.getModel()).contains("gemini-2.5-flash");
+        assertThat(response.getModel()).contains("gemini-3.8-flash");
 
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("E. First two models fail with retryable errors, third succeeds")
-    void firstTwoFailThirdSucceeds() {
+    @DisplayName("5. Several models fail in sequence (1-4 fail), fifth model (gemini-3.5-flash-lite) succeeds")
+    void severalModelsFailLaterModelSucceeds() {
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 503, "High demand", true, false));
+
+        when(geminiClient.callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.8-flash", 502, "Bad gateway", true, false));
+
+        when(geminiClient.callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.7-flash", 429, "Rate limited", true, false));
+
         when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
                 .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 503, "High demand", true, false));
 
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-2.5-flash", 429, "Rate limited", true, false));
-
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.success("Third model response for IS 4151 [Source 1].", "gemini-2.5-pro"));
+        when(geminiClient.callGenerateContent(eq("gemini-3.5-flash-lite"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.success("Fifth model response for IS 4151 [Source 1].", "gemini-3.5-flash-lite"));
 
         ChatRequest request = new ChatRequest("Helmet testing", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
 
         assertThat(response.isSuccess()).isTrue();
-        assertThat(response.getModel()).contains("gemini-2.5-pro");
+        assertThat(response.getModel()).contains("gemini-3.5-flash-lite");
 
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString());
         verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.5-flash-lite"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-flash-lite"), anyMap(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("F. All models fail -> Clean controlled error message returned to user")
-    void allModelsFailReturnsCleanError() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 503, "High demand", true, false));
-
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-2.5-flash", 503, "High demand", true, false));
-
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-2.5-pro", 429, "Quota exhausted", true, false));
+    @DisplayName("6. All six models fail -> Clean controlled error message returned to user without retry loop")
+    void allSixModelsFailReturnsCleanError() {
+        for (String model : SIX_PRIORITY_MODELS) {
+            when(geminiClient.callGenerateContent(eq(model), anyMap(), anyString(), anyString()))
+                    .thenReturn(GeminiModelResult.failure(model, 503, "High demand", true, false));
+        }
 
         ChatRequest request = new ChatRequest("Helmet testing", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
@@ -186,17 +205,17 @@ class GeminiModelFallbackTest {
         assertThat(response.isSuccess()).isFalse();
         assertThat(response.getError()).contains("All configured AI models are temporarily unavailable");
 
-        // Confirm each model was attempted exactly once
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString());
+        // Confirm each of the 6 models was attempted exactly once
+        for (String model : SIX_PRIORITY_MODELS) {
+            verify(geminiClient, times(1)).callGenerateContent(eq(model), anyMap(), anyString(), anyString());
+        }
     }
 
     @Test
-    @DisplayName("G. Invalid API Key (HTTP 401/403) -> Fail-fast immediately, does not waste attempts on other models")
+    @DisplayName("7. Invalid API Key (HTTP 401/403) -> Fail-fast immediately, does not waste attempts on remaining 5 models")
     void invalidApiKeyFailsFastWithoutTryingOtherModels() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 401, "API_KEY_INVALID", false, true));
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 401, "API_KEY_INVALID", false, true));
 
         ChatRequest request = new ChatRequest("Helmet testing", "en", null);
         ChatResponse response = geminiService.generateBisAnswer(request);
@@ -204,19 +223,38 @@ class GeminiModelFallbackTest {
         assertThat(response.isSuccess()).isFalse();
         assertThat(response.getError()).contains("API_KEY_INVALID");
 
-        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
-        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString());
-        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-pro"), anyMap(), anyString(), anyString());
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.7-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.5-flash-lite"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-2.5-flash-lite"), anyMap(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("H. RAG context is retrieved once and the identical payload is reused across fallback attempts")
-    void ragContextConstructedOnceAndReused() {
-        when(geminiClient.callGenerateContent(eq("gemini-3-flash-preview"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.failure("gemini-3-flash-preview", 503, "High demand", true, false));
+    @DisplayName("8. HTTP 400 Bad Request -> Non-retryable permanent error fails fast without trying other models")
+    void badRequestFailsFastWithoutTryingOtherModels() {
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 400, "INVALID_ARGUMENT", false, false));
 
-        when(geminiClient.callGenerateContent(eq("gemini-2.5-flash"), anyMap(), anyString(), anyString()))
-                .thenReturn(GeminiModelResult.success("Answer from fallback model [Source 1].", "gemini-2.5-flash"));
+        ChatRequest request = new ChatRequest("Helmet testing", "en", null);
+        ChatResponse response = geminiService.generateBisAnswer(request);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getError()).contains("INVALID_ARGUMENT");
+
+        verify(geminiClient, times(1)).callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString());
+        verify(geminiClient, never()).callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("9. RAG context is retrieved once and the identical payload is reused across fallback attempts")
+    void ragContextConstructedOnceAndReused() {
+        when(geminiClient.callGenerateContent(eq("gemini-3.6-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.failure("gemini-3.6-flash", 503, "High demand", true, false));
+
+        when(geminiClient.callGenerateContent(eq("gemini-3.8-flash"), anyMap(), anyString(), anyString()))
+                .thenReturn(GeminiModelResult.success("Answer from fallback model [Source 1].", "gemini-3.8-flash"));
 
         ChatRequest request = new ChatRequest("Impact test", "en", null);
         geminiService.generateBisAnswer(request);
@@ -236,23 +274,40 @@ class GeminiModelFallbackTest {
     }
 
     @Test
-    @DisplayName("I. Model router parses comma-separated list, trims, removes 'models/' prefix, and deduplicates")
-    void modelRouterParsesAndDeduplicatesList() {
-        GeminiModelRouter router = new GeminiModelRouter(geminiClient, " models/gemini-3-flash-preview, gemini-2.5-flash , gemini-3-flash-preview , gemini-2.5-pro ");
+    @DisplayName("10. Model router verifies exact 6-model priority order and default fallback list")
+    void modelRouterVerifiesExactSixModelPriorityOrder() {
+        GeminiModelRouter router = new GeminiModelRouter(geminiClient, "");
         List<String> models = router.getConfiguredModels();
 
-        assertThat(models).containsExactly("gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-pro");
-        assertThat(router.getPrimaryModel()).isEqualTo("gemini-3-flash-preview");
+        assertThat(models).containsExactly(
+                "gemini-3.6-flash",
+                "gemini-3.8-flash",
+                "gemini-3.7-flash",
+                "gemini-3-flash-preview",
+                "gemini-3.5-flash-lite",
+                "gemini-2.5-flash-lite"
+        );
+        assertThat(router.getPrimaryModel()).isEqualTo("gemini-3.6-flash");
     }
 
     @Test
-    @DisplayName("J. Model router falls back to legacy single model if GEMINI_MODELS is blank")
-    void modelRouterFallsBackToLegacySingleModel() {
+    @DisplayName("11. GEMINI_MODELS environment variable overrides the default model list and deduplicates")
+    void geminiModelsEnvVarOverridesDefaultList() {
+        GeminiModelRouter router = new GeminiModelRouter(geminiClient, " models/custom-model-1, custom-model-2 , custom-model-1 ");
+        List<String> models = router.getConfiguredModels();
+
+        assertThat(models).containsExactly("custom-model-1", "custom-model-2");
+        assertThat(router.getPrimaryModel()).isEqualTo("custom-model-1");
+    }
+
+    @Test
+    @DisplayName("12. GEMINI_MODEL legacy single model selection works when GEMINI_MODELS is blank")
+    void geminiModelLegacySingleModelWorks() {
         GeminiModelRouter router = new GeminiModelRouter(geminiClient, "");
-        ReflectionTestUtils.setField(router, "legacyModel", "gemini-2.5-flash");
+        ReflectionTestUtils.setField(router, "legacyModel", "custom-legacy-model");
 
         List<String> models = router.getConfiguredModels();
-        assertThat(models).containsExactly("gemini-2.5-flash");
-        assertThat(router.getPrimaryModel()).isEqualTo("gemini-2.5-flash");
+        assertThat(models).containsExactly("custom-legacy-model");
+        assertThat(router.getPrimaryModel()).isEqualTo("custom-legacy-model");
     }
 }

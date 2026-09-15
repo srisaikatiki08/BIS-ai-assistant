@@ -234,7 +234,7 @@ public class GeminiClient {
 
     public String normalizeModelName(String model) {
         if (model == null || model.trim().isEmpty()) {
-            return "gemini-3-flash-preview";
+            return "gemini-3.6-flash";
         }
         String clean = model.trim();
         if (clean.startsWith("models/")) {

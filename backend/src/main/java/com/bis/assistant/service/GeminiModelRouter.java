@@ -18,13 +18,18 @@ public class GeminiModelRouter {
     private static final Logger logger = LoggerFactory.getLogger(GeminiModelRouter.class);
 
     private static final List<String> DEFAULT_FALLBACK_MODELS = List.of(
-            "gemini-3-flash-preview"
+            "gemini-3.6-flash",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-3-flash-preview",
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite"
     );
 
     @Value("${gemini.api.models:}")
     private String configuredModelsString;
 
-    @Value("${gemini.api.model:gemini-3-flash-preview}")
+    @Value("${gemini.api.model:gemini-3.6-flash}")
     private String legacyModel;
 
     private final GeminiClient geminiClient;
@@ -86,7 +91,7 @@ public class GeminiModelRouter {
      */
     public String getPrimaryModel() {
         List<String> models = getConfiguredModels();
-        return models.isEmpty() ? "gemini-3-flash-preview" : models.get(0);
+        return models.isEmpty() ? "gemini-3.6-flash" : models.get(0);
     }
 
     /**

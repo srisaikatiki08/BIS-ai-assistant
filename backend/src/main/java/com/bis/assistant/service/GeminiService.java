@@ -2,19 +2,19 @@ package com.bis.assistant.service;
 
 import com.bis.assistant.dto.ChatRequest;
 import com.bis.assistant.dto.ChatResponse;
+import com.bis.assistant.dto.GeminiModelResult;
 import com.bis.assistant.model.KnowledgeChunk;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 
+/**
+ * High-level AI service orchestrating BIS knowledge retrieval (RAG),
+ * grounded prompt synthesis, multi-model fallback execution, and regulatory citation extraction.
+ */
 @Service
 public class GeminiService {
 
@@ -23,23 +23,31 @@ public class GeminiService {
     @Value("${gemini.api.key:}")
     private String apiKey;
 
-    @Value("${gemini.api.model:gemini-2.5-flash}")
-    private String defaultModel;
-
     @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models}")
     private String apiUrl;
 
     private final BisKnowledgeService bisKnowledgeService;
     private final KnowledgeRetrievalService knowledgeRetrievalService;
-    private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
+    private final GeminiModelRouter geminiModelRouter;
+    private final GeminiClient geminiClient;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public GeminiService(BisKnowledgeService bisKnowledgeService,
-                         KnowledgeRetrievalService knowledgeRetrievalService) {
+                         KnowledgeRetrievalService knowledgeRetrievalService,
+                         GeminiModelRouter geminiModelRouter,
+                         GeminiClient geminiClient) {
         this.bisKnowledgeService = bisKnowledgeService;
         this.knowledgeRetrievalService = knowledgeRetrievalService;
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+        this.geminiClient = geminiClient != null ? geminiClient : new GeminiClient();
+        this.geminiModelRouter = geminiModelRouter != null ? geminiModelRouter : new GeminiModelRouter(this.geminiClient);
+    }
+
+    /**
+     * Legacy constructor for backward compatibility with existing unit tests.
+     */
+    public GeminiService(BisKnowledgeService bisKnowledgeService,
+                         KnowledgeRetrievalService knowledgeRetrievalService) {
+        this(bisKnowledgeService, knowledgeRetrievalService, null, null);
     }
 
     public boolean isApiKeyConfigured() {
@@ -47,20 +55,19 @@ public class GeminiService {
     }
 
     public String getActiveModel() {
-        return (defaultModel != null && !defaultModel.trim().isEmpty()) ? defaultModel.trim() : "gemini-2.5-flash";
+        return geminiModelRouter.getPrimaryModel();
     }
 
     public String getNormalizedModelName() {
-        String model = getActiveModel();
-        if (model.startsWith("models/")) {
-            return model.substring("models/".length());
-        }
-        return model;
+        return geminiModelRouter.getPrimaryModel();
+    }
+
+    public List<String> getConfiguredModels() {
+        return geminiModelRouter.getConfiguredModels();
     }
 
     public String getApiUrl() {
         String url = (apiUrl != null && !apiUrl.trim().isEmpty()) ? apiUrl.trim() : "https://generativelanguage.googleapis.com/v1beta/models";
-        // Remove trailing slash if present
         if (url.endsWith("/")) {
             url = url.substring(0, url.length() - 1);
         }
@@ -72,7 +79,7 @@ public class GeminiService {
     }
 
     /**
-     * Generates a BIS compliant answer by calling Google Gemini API with knowledge grounding and conversation history.
+     * Generates a BIS compliant answer with RAG knowledge grounding and automated multi-model fallback.
      */
     public ChatResponse generateBisAnswer(ChatRequest request) {
         String userMessage = request.getMessage();
@@ -87,132 +94,102 @@ public class GeminiService {
             return ChatResponse.error("Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable on the Spring Boot server.");
         }
 
+        // Step 1: Retrieve BIS Knowledge Chunks once
         List<KnowledgeChunk> chunks = knowledgeRetrievalService.retrieveRelevantChunks(userMessage);
         logger.info("Retrieved {} BIS knowledge chunks for query: {}", chunks.size(), userMessage);
 
         String knowledgeContext = knowledgeRetrievalService.buildKnowledgeContext(chunks);
 
-        String modelName = getNormalizedModelName();
+        // Step 2: Build grounded system prompt once
         String baseSystemPrompt = bisKnowledgeService.buildSystemPrompt(language);
         String systemPrompt = baseSystemPrompt + "\n\n"
                 + "You must use the retrieved BIS knowledge below as the primary factual source for the answer. Do not invent standards, clauses, test values, dates, or regulatory requirements. If the retrieved knowledge does not contain enough information, clearly say that the local knowledge base does not contain enough information instead of making up details.\n\n"
                 + "RETRIEVED BIS KNOWLEDGE FROM POSTGRESQL:\n"
                 + knowledgeContext;
 
-        // Prepare Gemini Request Payload with System Instruction and History
+        // Step 3: Construct the conversational payload once
         Map<String, Object> payload = buildGeminiPayload(systemPrompt, userMessage.trim(), request.getHistory());
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("x-goog-api-key", apiKey.trim());
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+        // Step 4: Execute query through GeminiModelRouter with automated fallback
+        GeminiModelResult modelResult = geminiModelRouter.executeWithFallback(payload, apiKey.trim(), getApiUrl());
 
-        String safeUrl = getSafeEndpointUrl();
-        String requestUrl = String.format("%s/%s:generateContent?key=%s", getApiUrl(), modelName, apiKey.trim());
+        if (modelResult.isSuccess() && modelResult.getText() != null) {
+            String text = modelResult.getText();
+            String successfulModel = modelResult.getModelName();
 
-        try {
-            logger.info("Executing Google Gemini request to: {}", safeUrl);
+            // Step 5: Extract citations from the generated answer
+            List<Map<String, Object>> citations = extractCitations(text, chunks);
 
-            ResponseEntity<String> response = restTemplate.exchange(
-                    requestUrl,
-                    HttpMethod.POST,
-                    entity,
-                    String.class
-            );
+            // Construct sources list from cited documents (or top chunks if no citations tagged)
+            List<String> sources = !citations.isEmpty()
+                    ? citations.stream()
+                            .map(c -> (String) c.get("document"))
+                            .filter(Objects::nonNull)
+                            .map(String::trim)
+                            .distinct()
+                            .toList()
+                    : chunks.stream()
+                            .map(KnowledgeChunk::getDocument)
+                            .filter(doc -> doc != null && !doc.isBlank())
+                            .map(String::trim)
+                            .distinct()
+                            .toList();
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode rootNode = objectMapper.readTree(response.getBody());
-                JsonNode candidates = rootNode.path("candidates");
-                if (candidates.isArray() && candidates.size() > 0) {
-                    JsonNode parts = candidates.get(0).path("content").path("parts");
-                    if (parts.isArray() && parts.size() > 0) {
-                        String text = parts.get(0).path("text").asText();
+            ChatResponse chatResponse = ChatResponse.success(text.trim(), "Google Gemini (" + successfulModel + ")", sources);
+            chatResponse.setCitations(citations);
+            chatResponse.setConfidence(!citations.isEmpty() ? "Evidence-based" : "Standard Advisory");
 
-                        if (text != null && !text.trim().isEmpty()) {
-                            List<Map<String, Object>> citations = extractCitations(text, chunks);
-
-                            // Construct sources list from cited documents (or top chunks if no citations tagged)
-                            List<String> sources = !citations.isEmpty()
-                                    ? citations.stream()
-                                            .map(c -> (String) c.get("document"))
-                                            .filter(Objects::nonNull)
-                                            .map(String::trim)
-                                            .distinct()
-                                            .toList()
-                                    : chunks.stream()
-                                            .map(KnowledgeChunk::getDocument)
-                                            .filter(doc -> doc != null && !doc.isBlank())
-                                            .map(String::trim)
-                                            .distinct()
-                                            .toList();
-
-                            ChatResponse chatResponse = ChatResponse.success(text.trim(), "Google Gemini (" + modelName + ")", sources);
-                            chatResponse.setCitations(citations);
-                            chatResponse.setConfidence(!citations.isEmpty() ? "Evidence-based" : "Standard Advisory");
-
-                            // Populate primary sourceReference from the first cited source
-                            Map<String, Object> sourceRef = new HashMap<>();
-                            if (!citations.isEmpty()) {
-                                Map<String, Object> primary = citations.get(0);
-                                sourceRef.putAll(primary);
-                                sourceRef.put("disclaimer", "Official Bureau of Indian Standards regulatory reference.");
-                            } else if (!chunks.isEmpty()) {
-                                KnowledgeChunk firstChunk = chunks.get(0);
-                                if (firstChunk.getDocument() != null && !firstChunk.getDocument().isBlank()) {
-                                    sourceRef.put("document", firstChunk.getDocument());
-                                }
-                                if (firstChunk.getSection() != null && !firstChunk.getSection().isBlank()) {
-                                    sourceRef.put("section", firstChunk.getSection());
-                                }
-                                if (firstChunk.getClause() != null && !firstChunk.getClause().isBlank()) {
-                                    sourceRef.put("clause", firstChunk.getClause());
-                                }
-                                if (firstChunk.getPageNumber() != null) {
-                                    sourceRef.put("pageNumber", firstChunk.getPageNumber());
-                                }
-                                if (firstChunk.getSourceUrl() != null && !firstChunk.getSourceUrl().isBlank()) {
-                                    sourceRef.put("sourceUrl", firstChunk.getSourceUrl().trim());
-                                    sourceRef.put("portalUrl", firstChunk.getSourceUrl().trim());
-                                }
-                                sourceRef.put("disclaimer", "Official Bureau of Indian Standards regulatory reference.");
-                            }
-                            chatResponse.setSourceReference(sourceRef);
-
-                            chatResponse.setSuggestedFollowUps(List.of(
-                                    "What are the laboratory testing fees and timeline?",
-                                    "Which documents are required for MSME fee concession?",
-                                    "Find accredited testing laboratories nearby",
-                                    "Is this standard under a mandatory QCO in 2026?"
-                            ));
-
-                            return chatResponse;
-                        }
-                    }
+            // Populate primary sourceReference from the first cited source
+            Map<String, Object> sourceRef = new HashMap<>();
+            if (!citations.isEmpty()) {
+                Map<String, Object> primary = citations.get(0);
+                sourceRef.putAll(primary);
+                sourceRef.put("disclaimer", "Official Bureau of Indian Standards regulatory reference.");
+            } else if (!chunks.isEmpty()) {
+                KnowledgeChunk firstChunk = chunks.get(0);
+                if (firstChunk.getDocument() != null && !firstChunk.getDocument().isBlank()) {
+                    sourceRef.put("document", firstChunk.getDocument());
                 }
-                return ChatResponse.error("Gemini API returned an empty response candidate.");
-            } else {
-                return ChatResponse.error("Unexpected response status from Gemini API: " + response.getStatusCode());
+                if (firstChunk.getSection() != null && !firstChunk.getSection().isBlank()) {
+                    sourceRef.put("section", firstChunk.getSection());
+                }
+                if (firstChunk.getClause() != null && !firstChunk.getClause().isBlank()) {
+                    sourceRef.put("clause", firstChunk.getClause());
+                }
+                if (firstChunk.getPageNumber() != null) {
+                    sourceRef.put("pageNumber", firstChunk.getPageNumber());
+                }
+                if (firstChunk.getSourceUrl() != null && !firstChunk.getSourceUrl().isBlank()) {
+                    sourceRef.put("sourceUrl", firstChunk.getSourceUrl().trim());
+                    sourceRef.put("portalUrl", firstChunk.getSourceUrl().trim());
+                }
+                sourceRef.put("disclaimer", "Official Bureau of Indian Standards regulatory reference.");
             }
-        } catch (HttpStatusCodeException httpEx) {
-            String errorDetail = extractGoogleErrorMessage(httpEx);
-            int statusCode = httpEx.getStatusCode().value();
-            logger.error("Gemini API call failed with HTTP {} at {}: {}", statusCode, safeUrl, errorDetail);
+            chatResponse.setSourceReference(sourceRef);
 
-            return ChatResponse.error("Google Gemini API error (HTTP " + statusCode + "): " + errorDetail);
-        } catch (Exception ex) {
-            String cleanMsg = sanitizeErrorMessage(ex.getMessage());
-            logger.error("Exception during Gemini API invocation at {}: {}", safeUrl, cleanMsg, ex);
-            return ChatResponse.error("Failed to connect to Google Gemini API: " + cleanMsg);
+            chatResponse.setSuggestedFollowUps(List.of(
+                    "What are the laboratory testing fees and timeline?",
+                    "Which documents are required for MSME fee concession?",
+                    "Find accredited testing laboratories nearby",
+                    "Is this standard under a mandatory QCO in 2026?"
+            ));
+
+            return chatResponse;
+        } else {
+            return ChatResponse.error(modelResult.getErrorMessage());
         }
     }
 
     /**
-     * Test Gemini connectivity with a minimal prompt and safe diagnostics.
+     * Test Gemini connectivity with fallback models diagnostics.
      */
     public Map<String, Object> testConnection() {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("configuredModel", getActiveModel());
-        result.put("normalizedModel", getNormalizedModelName());
+        List<String> models = getConfiguredModels();
+        String primaryModel = getActiveModel();
+
+        result.put("primaryModel", primaryModel);
+        result.put("configuredModels", models);
         result.put("endpointUrl", getSafeEndpointUrl());
         result.put("apiKeyConfigured", isApiKeyConfigured());
 
@@ -222,61 +199,51 @@ public class GeminiService {
             return result;
         }
 
-        String model = getNormalizedModelName();
-        try {
-            Map<String, Object> payload = Map.of(
-                    "contents", List.of(
-                            Map.of("parts", List.of(Map.of("text", "Respond with exact words: 'Gemini connection verified.'")))
-                    )
-            );
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-goog-api-key", apiKey.trim());
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+        // Test primary model
+        Map<String, Object> primaryTest = geminiClient.testModelConnection(primaryModel, apiKey.trim(), getApiUrl());
+        boolean connected = Boolean.TRUE.equals(primaryTest.get("connected"));
+        result.put("primaryTest", primaryTest);
+        result.put("connected", connected);
+        result.put("httpStatus", primaryTest.get("httpStatus"));
 
-            String requestUrl = String.format("%s/%s:generateContent?key=%s", getApiUrl(), model, apiKey.trim());
-            ResponseEntity<String> response = restTemplate.exchange(requestUrl, HttpMethod.POST, entity, String.class);
+        if (connected) {
+            result.put("response", primaryTest.get("response"));
+            result.put("activeModel", primaryModel);
+        } else {
+            result.put("errorDetail", primaryTest.get("errorDetail"));
 
-            result.put("httpStatus", response.getStatusCode().value());
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode rootNode = objectMapper.readTree(response.getBody());
-                String text = rootNode.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText();
-                result.put("connected", true);
-                result.put("response", text != null && !text.isEmpty() ? text.trim() : "Connected");
-            } else {
-                result.put("connected", false);
-                result.put("message", "Non-200 response from Gemini API: " + response.getStatusCode());
-            }
-        } catch (HttpStatusCodeException httpEx) {
-            result.put("connected", false);
-            result.put("httpStatus", httpEx.getStatusCode().value());
-            result.put("errorDetail", extractGoogleErrorMessage(httpEx));
-        } catch (Exception e) {
-            result.put("connected", false);
-            result.put("errorDetail", sanitizeErrorMessage(e.getMessage()));
-        }
-        return result;
-    }
-
-    private String extractGoogleErrorMessage(HttpStatusCodeException httpEx) {
-        try {
-            String rawBody = httpEx.getResponseBodyAsString();
-            if (rawBody != null && !rawBody.trim().isEmpty()) {
-                JsonNode errNode = objectMapper.readTree(rawBody);
-                String msg = errNode.path("error").path("message").asText();
-                if (msg != null && !msg.trim().isEmpty()) {
-                    return sanitizeErrorMessage(msg);
+            // If primary model failed with retryable error, check fallback models
+            if (models.size() > 1) {
+                for (int i = 1; i < models.size(); i++) {
+                    String fallbackModel = models.get(i);
+                    Map<String, Object> fallbackTest = geminiClient.testModelConnection(fallbackModel, apiKey.trim(), getApiUrl());
+                    if (Boolean.TRUE.equals(fallbackTest.get("connected"))) {
+                        result.put("fallbackSuccess", true);
+                        result.put("fallbackModelUsed", fallbackModel);
+                        result.put("connected", true);
+                        result.put("response", fallbackTest.get("response"));
+                        break;
+                    }
                 }
+            }
+        }
+
+        // Optionally discover available models from API
+        try {
+            List<String> discovered = geminiClient.discoverAvailableModels(apiKey.trim(), getApiUrl());
+            if (!discovered.isEmpty()) {
+                result.put("discoveredGenerateContentModels", discovered);
             }
         } catch (Exception ignored) {
         }
-        return sanitizeErrorMessage(httpEx.getMessage());
+
+        return result;
     }
 
     /**
      * Constructs the Gemini payload with system instruction and multi-turn conversational history.
      */
-    private Map<String, Object> buildGeminiPayload(String systemPrompt, String userMessage, List<Map<String, Object>> history) {
+    public Map<String, Object> buildGeminiPayload(String systemPrompt, String userMessage, List<Map<String, Object>> history) {
         Map<String, Object> payload = new HashMap<>();
 
         // 1. System Instruction
@@ -306,7 +273,6 @@ public class GeminiService {
 
                 // Ensure turns alternate cleanly in Gemini
                 if (!contents.isEmpty() && contents.get(contents.size() - 1).get("role").equals(geminiRole)) {
-                    // Append text if consecutive same role
                     Map<String, Object> lastTurn = contents.get(contents.size() - 1);
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> parts = new ArrayList<>((List<Map<String, Object>>) lastTurn.get("parts"));
@@ -345,14 +311,6 @@ public class GeminiService {
         payload.put("generationConfig", generationConfig);
 
         return payload;
-    }
-
-    private String sanitizeErrorMessage(String rawMessage) {
-        if (rawMessage == null) return "Unexpected error";
-        if (apiKey != null && !apiKey.isEmpty()) {
-            return rawMessage.replace(apiKey, "[REDACTED_API_KEY]");
-        }
-        return rawMessage;
     }
 
     /**

@@ -118,8 +118,8 @@ export async function queryAiAssistantAsync(userQuery, language = 'en', history 
           disclaimer: "AI service requires a valid GEMINI_API_KEY on the Spring Boot server."
         },
         suggestedFollowUps: [
-          "Check Spring Boot backend status on port 8080",
-          "Configure GEMINI_API_KEY in terminal"
+          "Check Spring Boot backend status and health endpoint",
+          "Configure GEMINI_API_KEY on the server"
         ]
       };
     }
@@ -128,13 +128,13 @@ export async function queryAiAssistantAsync(userQuery, language = 'en', history 
     return {
       id: "msg-err-" + Date.now(),
       role: "assistant",
-      content: "AI service is currently unavailable. Please check that the Java Spring Boot backend is running at http://localhost:8080.",
+      content: "AI service is currently unavailable. Please verify that the BIS backend service is running and accessible.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       category: "Connection Error",
       modelBadge: "Connection Error",
       sourceReference: {
         document: "Backend Connection",
-        clause: "HTTP 8080",
+        clause: "Service Gateway",
         disclaimer: "Unable to reach server."
       }
     };

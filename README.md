@@ -1,4 +1,4 @@
-# BIS Intelligent Assistant (भारतीय मानक ब्यूरो - AI सहचर)
+# BIS Intelligent Assistant (Bureau of Indian Standards - AI Companion)
 
 A modern, full-stack regulatory and compliance intelligence platform for the **Bureau of Indian Standards (BIS)**, Ministry of Consumer Affairs, Food & Public Distribution, Government of India.
 
